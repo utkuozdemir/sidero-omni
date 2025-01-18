@@ -91,6 +91,7 @@ func (m *InfraMachineSpec) CloneVT() *InfraMachineSpec {
 	r.ExtraKernelArgs = m.ExtraKernelArgs
 	r.RequestedRebootId = m.RequestedRebootId
 	r.Cordoned = m.Cordoned
+	r.LastInstalledEventTimestamp = (*timestamppb.Timestamp)((*timestamppb1.Timestamp)(m.LastInstalledEventTimestamp).CloneVT())
 	if rhs := m.Extensions; rhs != nil {
 		tmpContainer := make([]string, len(rhs))
 		copy(tmpContainer, rhs)
@@ -133,6 +134,7 @@ func (m *InfraMachineStatusSpec) CloneVT() *InfraMachineStatusSpec {
 	r.ReadyToUse = m.ReadyToUse
 	r.LastRebootId = m.LastRebootId
 	r.LastRebootTimestamp = (*timestamppb.Timestamp)((*timestamppb1.Timestamp)(m.LastRebootTimestamp).CloneVT())
+	r.Installed = m.Installed
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
 		copy(r.unknownFields, m.unknownFields)
@@ -309,6 +311,9 @@ func (this *InfraMachineSpec) EqualVT(that *InfraMachineSpec) bool {
 	if this.Cordoned != that.Cordoned {
 		return false
 	}
+	if !(*timestamppb1.Timestamp)(this.LastInstalledEventTimestamp).EqualVT((*timestamppb1.Timestamp)(that.LastInstalledEventTimestamp)) {
+		return false
+	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
 
@@ -354,6 +359,9 @@ func (this *InfraMachineStatusSpec) EqualVT(that *InfraMachineStatusSpec) bool {
 		return false
 	}
 	if !(*timestamppb1.Timestamp)(this.LastRebootTimestamp).EqualVT((*timestamppb1.Timestamp)(that.LastRebootTimestamp)) {
+		return false
+	}
+	if this.Installed != that.Installed {
 		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
@@ -597,6 +605,16 @@ func (m *InfraMachineSpec) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.LastInstalledEventTimestamp != nil {
+		size, err := (*timestamppb1.Timestamp)(m.LastInstalledEventTimestamp).MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x4a
+	}
 	if m.Cordoned {
 		i--
 		if m.Cordoned {
@@ -729,6 +747,16 @@ func (m *InfraMachineStatusSpec) MarshalToSizedBufferVT(dAtA []byte) (int, error
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.Installed {
+		i--
+		if m.Installed {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x28
 	}
 	if m.LastRebootTimestamp != nil {
 		size, err := (*timestamppb1.Timestamp)(m.LastRebootTimestamp).MarshalToSizedBufferVT(dAtA[:i])
@@ -981,6 +1009,10 @@ func (m *InfraMachineSpec) SizeVT() (n int) {
 	if m.Cordoned {
 		n += 2
 	}
+	if m.LastInstalledEventTimestamp != nil {
+		l = (*timestamppb1.Timestamp)(m.LastInstalledEventTimestamp).SizeVT()
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
 	n += len(m.unknownFields)
 	return n
 }
@@ -1017,6 +1049,9 @@ func (m *InfraMachineStatusSpec) SizeVT() (n int) {
 	if m.LastRebootTimestamp != nil {
 		l = (*timestamppb1.Timestamp)(m.LastRebootTimestamp).SizeVT()
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	if m.Installed {
+		n += 2
 	}
 	n += len(m.unknownFields)
 	return n
@@ -1747,6 +1782,42 @@ func (m *InfraMachineSpec) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.Cordoned = bool(v != 0)
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastInstalledEventTimestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.LastInstalledEventTimestamp == nil {
+				m.LastInstalledEventTimestamp = &timestamppb.Timestamp{}
+			}
+			if err := (*timestamppb1.Timestamp)(m.LastInstalledEventTimestamp).UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])
@@ -1976,6 +2047,26 @@ func (m *InfraMachineStatusSpec) UnmarshalVT(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Installed", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Installed = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

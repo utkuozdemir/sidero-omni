@@ -49,6 +49,7 @@ message InfraMachineSpec {
   string extra_kernel_args = 6;
   string requested_reboot_id = 7;
   bool cordoned = 8;
+  google.protobuf.Timestamp last_installed_event_timestamp = 9;
 }
 
 message InfraMachineStateSpec {
@@ -66,6 +67,7 @@ message InfraMachineStatusSpec {
   bool ready_to_use = 2;
   string last_reboot_id = 3;
   google.protobuf.Timestamp last_reboot_timestamp = 4;
+  bool installed = 5;
 }
 
 message InfraProviderStatusSpec {

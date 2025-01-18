@@ -29,17 +29,19 @@ import (
 
 // Handler is a machine event handler.
 type Handler struct {
-	logger   *zap.Logger
-	state    state.State
-	notifyCh chan<- *omni.MachineStatusSnapshot
+	logger           *zap.Logger
+	state            state.State
+	notifyCh         chan<- *omni.MachineStatusSnapshot
+	installedEventCh chan<- resource.ID
 }
 
 // NewHandler creates a new machine event handler.
-func NewHandler(state state.State, logger *zap.Logger, notifyCh chan<- *omni.MachineStatusSnapshot) *Handler {
+func NewHandler(state state.State, logger *zap.Logger, notifyCh chan<- *omni.MachineStatusSnapshot, installedEventCh chan<- resource.ID) *Handler {
 	return &Handler{
-		state:    state,
-		logger:   logger,
-		notifyCh: notifyCh,
+		state:            state,
+		logger:           logger,
+		notifyCh:         notifyCh,
+		installedEventCh: installedEventCh,
 	}
 }
 
@@ -155,6 +157,12 @@ func (handler *Handler) handleSequenceEvent(ctx context.Context, event *machinea
 		}
 
 		return err
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case handler.installedEventCh <- machineID:
 	}
 
 	logger.Info("marked infra machine as installed")

@@ -13,6 +13,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/cosi-project/runtime/pkg/controller"
 	"github.com/cosi-project/runtime/pkg/controller/generic/destroy"
 	cosiruntime "github.com/cosi-project/runtime/pkg/controller/runtime"
@@ -86,7 +87,7 @@ type Runtime struct {
 //nolint:maintidx
 func New(talosClientFactory *talos.ClientFactory, dnsService *dns.Service, workloadProxyReconciler *workloadproxy.Reconciler,
 	resourceLogger *resourcelogger.Logger, imageFactoryClient *imagefactory.Client, linkCounterDeltaCh <-chan siderolink.LinkCounterDeltas,
-	siderolinkEventsCh <-chan *omni.MachineStatusSnapshot, resourceState state.State, virtualState *virtual.State, metricsRegistry prometheus.Registerer,
+	siderolinkEventsCh <-chan *omni.MachineStatusSnapshot, installedEventCh <-chan cosiresource.ID, resourceState state.State, virtualState *virtual.State, metricsRegistry prometheus.Registerer,
 	defaultDiscoveryClient, embeddedDiscoveryClient omnictrl.DiscoveryClient, logger *zap.Logger,
 ) (*Runtime, error) {
 	var opts []options.Option
@@ -271,7 +272,7 @@ func New(talosClientFactory *talos.ClientFactory, dnsService *dns.Service, workl
 		omnictrl.NewMachineRequestSetStatusController(),
 		omnictrl.NewClusterMachineRequestStatusController(),
 		omnictrl.NewMachineTeardownController(),
-		omnictrl.NewInfraMachineController(),
+		omnictrl.NewInfraMachineController(clock.New(), installedEventCh), // todo: pass the channel
 		omnictrl.NewInfraProviderConfigPatchController(),
 	}
 

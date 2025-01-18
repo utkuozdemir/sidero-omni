@@ -30,7 +30,7 @@ import (
 func TestSequenceEvent(t *testing.T) {
 	st := state.WrapCore(namespaced.NewState(inmem.Build))
 	logger := zaptest.NewLogger(t)
-	handler := machineevent.NewHandler(st, logger, nil)
+	handler := machineevent.NewHandler(st, logger, nil, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
