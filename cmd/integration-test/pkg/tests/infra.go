@@ -322,10 +322,6 @@ func AssertInfraMachinesAreAllocated(testCtx context.Context, omniState state.St
 			rtestutils.AssertResource[*infra.MachineStatus](ctx, t, omniState, id, func(res *infra.MachineStatus, assertion *assert.Assertions) {
 				assertion.Equal(specs.InfraMachineStatusSpec_POWER_STATE_ON, res.TypedSpec().Value.PowerState)
 				assertion.True(res.TypedSpec().Value.ReadyToUse)
-			})
-
-			// Omni receives a SequenceEvent from the SideroLink event sink and sets the Installed field to true
-			rtestutils.AssertResource[*infra.MachineState](ctx, t, omniState, id, func(res *infra.MachineState, assertion *assert.Assertions) {
 				assertion.True(res.TypedSpec().Value.Installed)
 			})
 		}
@@ -357,13 +353,10 @@ func AssertAllInfraMachinesAreUnallocated(testCtx context.Context, omniState sta
 				}
 			})
 
-			// provider wipes the machine and sets the Installed field to false
-			rtestutils.AssertResource[*infra.MachineState](ctx, t, omniState, id, func(res *infra.MachineState, assertion *assert.Assertions) {
-				assertion.False(res.TypedSpec().Value.Installed)
-			})
-
+			// the provider will wipe the machine and sets the Installed field to false
 			// after the machine is wiped, ReadyToUse field will be set to true
 			rtestutils.AssertResource[*infra.MachineStatus](ctx, t, omniState, id, func(res *infra.MachineStatus, assertion *assert.Assertions) {
+				assertion.False(res.TypedSpec().Value.Installed)
 				assertion.True(res.TypedSpec().Value.ReadyToUse)
 			})
 		}
