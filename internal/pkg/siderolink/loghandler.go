@@ -6,45 +6,43 @@
 package siderolink
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"net/netip"
 
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/siderolabs/gen/optional"
-	"github.com/siderolabs/go-tail"
 	"go.uber.org/zap"
 
 	"github.com/siderolabs/omni/client/pkg/omni/resources"
 	"github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/siderolabs/omni/internal/pkg/config"
+	"github.com/siderolabs/omni/internal/pkg/siderolink/logstore"
 )
 
 // NewLogHandler returns a new LogHandler.
-func NewLogHandler(machineMap *MachineMap, omniState state.State, storageConfig *config.LogsMachine, logger *zap.Logger) (*LogHandler, error) {
-	cache, err := NewMachineCache(storageConfig, logger)
+func NewLogHandler(machineMap *MachineMap, omniState state.State, config *config.LogsMachine, logger *zap.Logger) (*LogHandler, error) {
+	cache, err := NewMachineCache(config, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create machine cache: %w", err)
 	}
 
 	handler := LogHandler{
-		Map:       machineMap,
-		OmniState: omniState,
-		Cache:     cache,
-		logger:    logger,
+		machineMap: machineMap,
+		state:      omniState,
+		Cache:      cache,
+		logger:     logger,
 	}
 
 	return &handler, nil
 }
 
-// LogHandler stores a map of machines to their circular log buffers.
+// LogHandler stores a map of machines to their log stores.
 type LogHandler struct {
-	OmniState state.State
-	Map       *MachineMap
-	logger    *zap.Logger
-	Cache     *MachineCache
+	state      state.State
+	machineMap *MachineMap
+	logger     *zap.Logger
+	Cache      *MachineCache
 }
 
 // Start starts the LogHandler.
@@ -53,7 +51,7 @@ func (h *LogHandler) Start(ctx context.Context) error {
 
 	eventCh := make(chan state.Event)
 
-	if err := h.OmniState.WatchKind(
+	if err := h.state.WatchKind(
 		ctx,
 		omni.NewMachine(resources.DefaultNamespace, "").Metadata(),
 		eventCh,
@@ -65,6 +63,7 @@ func (h *LogHandler) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			//nolint:contextcheck
 			if err := h.Cache.Close(); err != nil {
 				h.logger.Error("failed to close machine logs cache", zap.Error(err))
 			}
@@ -79,11 +78,11 @@ func (h *LogHandler) Start(ctx context.Context) error {
 			case state.Destroyed:
 				machineID := MachineID(event.Resource.Metadata().ID())
 
-				h.Map.RemoveByMachineID(machineID)
+				h.machineMap.RemoveByMachineID(machineID)
 
-				err := h.Cache.Remove(machineID)
+				err := h.Cache.remove(ctx, machineID)
 				if err != nil {
-					h.logger.Error("failed to remove machine buffer", zap.String("machine_id", string(machineID)), zap.Error(err))
+					h.logger.Error("failed to remove machine log store", zap.String("machine_id", string(machineID)), zap.Error(err))
 				}
 			}
 		}
@@ -97,13 +96,13 @@ func (h *LogHandler) HasLink(srcAddress netip.Addr) bool {
 		return false
 	}
 
-	_, err := h.Map.GetMachineID(ip)
+	_, err := h.machineMap.GetMachineID(ip)
 
 	return err == nil
 }
 
 // HandleMessage handles a log message.
-func (h *LogHandler) HandleMessage(srcAddress netip.Addr, rawData []byte) {
+func (h *LogHandler) HandleMessage(ctx context.Context, srcAddress netip.Addr, rawData []byte) {
 	currentIP := srcAddress.String()
 	if currentIP == "" {
 		h.logger.Error("empty IP address")
@@ -120,23 +119,23 @@ func (h *LogHandler) HandleMessage(srcAddress netip.Addr, rawData []byte) {
 		return
 	}
 
-	err := h.writeMessage(currentIP, rawData)
+	err := h.writeMessage(ctx, currentIP, rawData)
 	if err != nil {
-		logger.Error("failed to write message to buffer", zap.Error(err))
+		logger.Error("failed to write message to log store", zap.Error(err))
 
 		return
 	}
 }
 
-func (h *LogHandler) writeMessage(ip string, data []byte) error {
-	id, err := h.Map.GetMachineID(ip)
+func (h *LogHandler) writeMessage(ctx context.Context, ip string, data []byte) error {
+	id, err := h.machineMap.GetMachineID(ip)
 	if err != nil {
-		return fmt.Errorf("failed to get machine ID for ip address '%s': %w", ip, err)
+		return fmt.Errorf("failed to get machine ID for ip address %q: %w", ip, err)
 	}
 
-	err = h.Cache.WriteMessage(id, data)
+	err = h.Cache.WriteMessage(ctx, id, data)
 	if err != nil {
-		return fmt.Errorf("failed to write message to buffer for machine '%s': %w", id, err)
+		return fmt.Errorf("failed to write message to log store for machine %q: %w", id, err)
 	}
 
 	return nil
@@ -153,7 +152,7 @@ func (h *LogHandler) HandleError(srcAddress netip.Addr, hErr error) {
 
 	logger := h.logger.With(zap.String("machine_ip", currentIP))
 
-	id, err := h.Map.GetMachineID(currentIP)
+	id, err := h.machineMap.GetMachineID(currentIP)
 	if err != nil {
 		h.logger.Error("failed to get machine ID for ip address", zap.String("ip", currentIP), zap.Error(err))
 
@@ -166,79 +165,20 @@ func (h *LogHandler) HandleError(srcAddress netip.Addr, hErr error) {
 }
 
 // GetReader returns a line reader for the given machine ID.
-func (h *LogHandler) GetReader(machineID MachineID, follow bool, tailLines optional.Optional[int32]) (*LineReader, error) {
-	buf, err := h.Cache.GetBuffer(machineID)
+func (h *LogHandler) GetReader(ctx context.Context, machineID MachineID, follow bool, tailLines optional.Optional[int32]) (*logstore.LineReader, error) {
+	logStore, err := h.Cache.getLogStore(ctx, machineID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get buffer for machine '%s': %w", machineID, err)
+		return nil, fmt.Errorf("failed to get log store for machine %q: %w", machineID, err)
 	}
 
-	var r interface {
-		io.ReadCloser
-		io.Seeker
+	nLines := tailLines.ValueOrZero()
+
+	reader, err := logStore.Reader(int(nLines), follow)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get reader for machine %q: %w", machineID, err)
 	}
 
-	if follow {
-		r = buf.GetStreamingReader()
-	} else {
-		r = buf.GetReader()
-	}
-
-	if tailLines.IsPresent() {
-		// since we are surrounding each message with \n we should increase lines by two times.
-		lines := int(tailLines.ValueOrZero()) * 2
-
-		err := tail.SeekLines(r, lines)
-		if err != nil {
-			return nil, fmt.Errorf("failed to seek %d lines: %w", lines, err)
-		}
-	}
-
-	return &LineReader{reader: r}, nil
-}
-
-// LineReader is a reader which reads lines surrounded by \n from the underlying reader.
-type LineReader struct {
-	buf    *bufio.Reader
-	reader io.ReadCloser
-}
-
-// Close closes the LineReader underlying reader.
-func (r *LineReader) Close() error {
-	return r.reader.Close()
-}
-
-// ReadLine reads a line from the underlying reader.
-func (r *LineReader) ReadLine() ([]byte, error) {
-	if r.buf == nil {
-		r.buf = bufio.NewReader(r.reader)
-	}
-
-	for {
-		emptyLine, err := r.buf.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
-				return nil, io.EOF
-			}
-
-			return nil, fmt.Errorf("failed to read line: %w", err)
-		}
-
-		if len(emptyLine) != 1 {
-			// missed the start of the line, skipping to the next entry
-			continue
-		}
-
-		logLine, err := r.buf.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
-				return nil, io.EOF
-			}
-
-			return nil, fmt.Errorf("failed to read line: %w", err)
-		}
-
-		return trimNewlines(logLine), nil
-	}
+	return reader, nil
 }
 
 // trimNewlines trims a newline from the start and from end of a byte slice.

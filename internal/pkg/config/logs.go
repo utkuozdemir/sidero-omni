@@ -23,15 +23,14 @@ type Logs struct {
 
 // LogsMachine configures Talos machine logs handler.
 type LogsMachine struct {
-	// Storage configures persistent machine log storage of the Omni instance.
-	Storage LogsMachineStorage `yaml:"storage"`
-
-	BufferInitialCapacity int `yaml:"bufferInitialCapacity"`
-	BufferMaxCapacity     int `yaml:"bufferMaxCapacity"`
-	BufferSafetyGap       int `yaml:"bufferSafetyGap"`
+	Storage               LogsMachineStorage       `yaml:"storage"`
+	SQLiteStorage         LogsMachineSQLiteStorage `yaml:"sqliteStorage"`
+	BufferInitialCapacity int                      `yaml:"bufferInitialCapacity"`
+	BufferMaxCapacity     int                      `yaml:"bufferMaxCapacity"`
+	BufferSafetyGap       int                      `yaml:"bufferSafetyGap"`
 }
 
-// LogsMachineStorage configures the machine logs storage.
+// LogsMachineStorage configures the machine logs storage if SQLite storage is not enabled.
 //
 //nolint:govet
 type LogsMachineStorage struct {
@@ -44,6 +43,15 @@ type LogsMachineStorage struct {
 	FlushJitter float64 `yaml:"flushJitter"`
 	// NumCompressedChunks is the count of log chunks to keep in the logs history.
 	NumCompressedChunks int `yaml:"numCompressedChunks"`
+}
+
+type LogsMachineSQLiteStorage struct {
+	Path                   string        `yaml:"path"`
+	Options                string        `yaml:"options"`
+	FlushPeriod            time.Duration `yaml:"flushPeriod"`
+	WriteBufferMaxCapacity uint64        `yaml:"writeBufferMaxCapacity"`
+	Timeout                time.Duration `yaml:"timeout"`
+	Enabled                bool          `yaml:"enabled"`
 }
 
 // LogsAudit configures audit logs peristence.
