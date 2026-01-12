@@ -60,3 +60,16 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Return the name of the etcd encryption secret to use.
+If 'existingSecret' is set, use it.
+Otherwise, use the chart's fullname suffix.
+*/}}
+{{- define "omni-v2.etcdSecretName" -}}
+{{- if .Values.etcdEncryptionKey.existingSecret -}}
+    {{- .Values.etcdEncryptionKey.existingSecret -}}
+{{- else -}}
+    {{- include "omni-v2.fullname" . -}}-etcd-key
+{{- end -}}
+{{- end -}}

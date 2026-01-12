@@ -3,4 +3,4 @@ name: omni-v2
 description: A helm chart to deploy Omni on a Kubernetes cluster
 type: application
 version: 2.0.0
-appVersion: "v1.32.0"
+appVersion: "v1.4.7"

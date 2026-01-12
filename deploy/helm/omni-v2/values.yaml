@@ -1,38 +1,657 @@
+# -- Provide a name in place of `omni`
+nameOverride: "omni"
+# -- String to fully override `"omni-v2.fullname"`
+fullnameOverride: ""
+
 # -- Omni currently only supports a single replica.
-# If embedded etcd is used, this value should remain at 1.
-# If an external etcd cluster is used, multiple replicas can be used, but they will run an etcd election and only one instance will be active at a time, others will be standby.
+## If embedded etcd is used, this value should remain at 1.
+## If an external etcd cluster is used, multiple replicas can be used, but they will run an etcd election and only one instance will be active at a time, others will be standby.
 replicaCount: 1
 
 # -- Deployment strategy. Omni currently only supports Recreate strategy.
 strategy:
   type: Recreate
 
-args:
-  - --config-path=/config/config.yaml
-# - --debug
-
+# Omni image
 image:
+  # -- Repository to use for Omni
   repository: ghcr.io/siderolabs/omni
+  # -- Image pull policy for Omni
   pullPolicy: IfNotPresent
+  # -- Tag to use for Omni
   tag: ""
 
+# -- Secrets with credentials to pull images from a private registry
 imagePullSecrets: []
 
-nameOverride: ""
-fullnameOverride: ""
+## Container Arguments
+args:
+  # -- Path to the configuration file (mounted via ConfigMap).
+  ## Do not remove this unless you are using args only.
+  - --config-path=/config/config.yaml
+  # -- Enable debug logging.
+  ## Uncomment this line to increase log verbosity for troubleshooting.
+  # - --debug
 
-serviceAccount:
-  create: true
-  automount: true
+# Sidero Omni Configuration
+config:
+  ## Account Configuration
+  account:
+    # -- Immutable instance account ID.
+    ## Must NEVER change after first startup.
+    id: edd2822a-7834-4fe0-8172-cc5581f13a8d
+    # -- Human-readable instance name
+    name: default
+    # -- UserPilot integration token (UX telemetry / onboarding)
+    # userPilot:
+      # -- UserPilot application token
+      # appToken: ""
+
+  ## Authentication Configuration
+  auth:
+    # -- Auth0 provider configuration
+    auth0:
+      # -- Enable Auth0 authentication
+      enabled: true
+      # -- Auth0 domain
+      domain: example.eu.auth0.com
+      # -- Auth0 client ID
+      clientID: CLIENT_ID_HERE
+      # -- Use form-data instead of JSON
+      # useFormData: false
+
+    # -- WebAuthn configuration
+    # webauthn:
+      # -- Enable WebAuthn authentication
+      # enabled: false
+      # -- Require WebAuthn authentication
+      # required: false
+
+    # -- SAML configuration
+    # saml:
+      # -- Enable SAML authentication
+      # enabled: false
+      # -- SAML label rules
+      # labelRules: {}
+      # -- SAML attribute rules
+      # attributeRules: {}
+      # -- SAML endpoint URL
+      # url: ""
+      # -- SAML metadata XML
+      # metadata: ""
+      # -- NameID format
+      # nameIDFormat: ""
+
+    # -- OIDC configuration
+    # oidc:
+      # -- Enable OIDC authentication
+      # enabled: false
+      # -- OIDC provider URL
+      # providerURL: ""
+      # -- OIDC client ID
+      # clientID: ""
+      # -- OIDC client secret
+      # clientSecret: ""
+      # -- Logout redirect URL
+      # logoutURL: ""
+      # -- Requested scopes
+      # scopes: []
+      # -- Allow unverified email addresses
+      # allowUnverifiedEmail: false
+
+    # -- Initial users created on startup
+    initialUsers:
+      - initial-user-1@example.com
+      - initial-user-2@example.com
+
+    # -- Key Pruner configuration
+    # keyPruner:
+      # -- Interval for pruning expired keys
+      # interval: 10m0s
+      # -- Start omni in suspended (read-only) mode
+      # suspended: false
+
+    # -- Initial Service Account configuration
+    # initialServiceAccount:
+      # -- Enable initial service account
+      # enabled: false
+      # -- The initial service account access role
+      # role: Admin
+      # -- Dump the initial service account key into the path
+      ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+      # keyPath: _out/initial-service-account-key
+      # -- Initial service account name
+      # name: automation
+      # -- Lifetime duration of the initial service account key
+      # lifetime: 1h0m0s
+
+  ## Service Configuration
+  services:
+    # -- API server configuration
+    api:
+      # -- Bind address for Omni API server
+      # endpoint: 0.0.0.0:8080
+      # -- Public URL advertised to users and CLIs
+      advertisedURL: https://omni.omni.example.com
+      # -- TLS certificate file (empty = TLS terminated elsewhere, e.g. ingress)
+      # certFile: ""
+      # -- TLS private key file
+      # keyFile: ""
+
+    # -- Development server proxy configuration
+    # devServerProxy:
+      # -- Bind address for development server proxy
+      # endpoint: ""
+      # -- Public URL for development server proxy
+      # advertisedURL: ""
+      # -- TLS certificate file
+      # certFile: ""
+      # -- TLS private key file
+      # keyFile: ""
+      # -- Target endpoint to proxy requests to
+      # proxyTo: ""
+
+    # -- Metrics configuration
+    # metrics:
+      # -- Bind address for Prometheus metrics endpoint
+      # endpoint: 0.0.0.0:2122
+      # -- Public URL for metrics endpoint
+      # advertisedURL: ""
+      # -- TLS certificate file
+      # certFile: ""
+      # -- TLS private key file
+      # keyFile: ""
+
+    # -- Kubernetes API proxy configuration
+    kubernetesProxy:
+      # -- Bind address for Kubernetes proxy
+      # endpoint: 0.0.0.0:8095
+      # -- Public kubectl endpoint
+      advertisedURL: https://kubernetes-omni.omni.example.com
+      # -- TLS certificate file
+      # certFile: ""
+      # -- TLS private key file
+      # keyFile: ""
+
+    # -- Machine API configuration (SideroLink)
+    machineAPI:
+      # -- Machine API endpoint (currently a URL; typically a bind address)
+      # endpoint: 0.0.0.0:8090
+      # -- Publicly advertised Machine API URL
+      advertisedURL: https://siderolink-omni.omni.example.com
+      # -- TLS certificate file
+      # certFile: ""
+      # -- TLS private key file
+      # keyFile: ""
+
+    # -- SideroLink (WireGuard) configuration
+    siderolink:
+      # -- WireGuard listener configuration
+      wireGuard:
+        # -- Bind address for WireGuard listener
+        # endpoint: 0.0.0.0:50180
+        # -- Public WireGuard endpoint advertised to Talos nodes
+        advertisedEndpoint: IP_HERE:30180
+        # -- Join flow mode (legacy or secure)
+        # joinTokensMode: legacy
+        # -- Whether to populate last known peer endpoint
+        # disableLastEndpoint: false
+        # -- Tunnel WireGuard over gRPC instead of UDP
+        # useGRPCTunnel: false
+        # -- Port for Talos event ingestion
+        # eventSinkPort: 8090
+        # -- TCP log ingestion port
+        # logServerPort: 8092
+
+    # -- Local Resource Service configuration
+    # localResourceService:
+      # -- Enable local resource service
+      # enabled: true
+      # -- Port for local resource service
+      # port: 8081
+
+    # -- Embedded Discovery Service configuration
+    # embeddedDiscoveryService:
+      # -- Enable embedded discovery service
+      # enabled: true
+      # -- Port for discovery service
+      # port: 8093
+      # -- Enable snapshot persistence
+      # snapshotsEnabled: true
+      # -- Path for snapshot storage
+      ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+      # snapshotsPath: "_out/secondary-storage/discovery-service-state.binpb"
+      # -- Snapshot interval
+      # snapshotsInterval: 10m0s
+      # -- Log level for discovery service
+      # logLevel: warn
+
+    # -- Load Balancer configuration
+    # loadBalancer:
+      # -- Minimum port allocated for load balancers
+      # minPort: 10000
+      # -- Maximum port allocated for load balancers
+      # maxPort: 35000
+      # -- Dial timeout for backend connections
+      # dialTimeout: 15s
+      # -- TCP keepalive period
+      # keepAlivePeriod: 30s
+      # -- TCP user timeout
+      # tcpUserTimeout: 30s
+      # -- Health check interval
+      # healthCheckInterval: 20s
+      # -- Health check timeout
+      # healthCheckTimeout: 15s
+
+    # -- Workload Proxy configuration
+    # workloadProxy:
+      # -- Subdomain used for workload proxy routing
+      # subdomain: proxy-us
+      # -- Enable workload proxy
+      # enabled: true
+      # -- Stop load balancers after inactivity
+      # stopLBsAfter: 5m0s
+
+  ## Logging Configuration
+  # logs:
+    # -- Machine logging configuration
+    # machine:
+      # -- Storage settings for machine logs
+      # storage:
+        # -- Enable persistent storage for machine logs
+        # enabled: true
+        # -- Path where machine logs are stored
+        ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+        # path: "_out/logs"
+        # -- Flush period for logs
+        # flushPeriod: 10m
+        # -- Jitter for flush period
+        # flushJitter: 0.1
+        # -- Initial buffer capacity
+        # bufferInitialCapacity: 16384
+        # -- Max buffer capacity
+        # bufferMaxCapacity: 131072
+        # -- Buffer safety gap
+        # bufferSafetyGap: 256
+
+    # -- Audit logging
+    # audit:
+      ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+      # path: "_out/audit"
+
+    # -- Resource Logger configuration
+    # resourceLogger:
+      # -- Log level for resource updates
+      # logLevel: info
+      # -- List of resource types whose updates should be logged
+      # types:
+        #   - Identities.omni.sidero.dev
+        #   - Users.omni.sidero.dev
+        #   - AccessPolicies.omni.sidero.dev
+        #   - SAMLLabelRules.omni.sidero.dev
+        #   - JoinTokens.omni.sidero.dev
+        #   - DefaultJoinTokens.omni.sidero.dev
+        #   - Clusters.omni.sidero.dev
+        #   - ConfigPatches.omni.sidero.dev
+        #   - EtcdManualBackups.omni.sidero.dev
+        #   - MachineClasses.omni.sidero.dev
+        #   - MachineLabels.omni.sidero.dev
+        #   - MachineSets.omni.sidero.dev
+        #   - MachineSetNodes.omni.sidero.dev
+        #   - EtcdBackupS3Configs.omni.sidero.dev
+        #   - ExtensionsConfigurations.omni.sidero.dev
+        #   - KernelArgs.omni.sidero.dev
+        #   - MachineRequestSets.omni.sidero.dev
+        #   - ImportedClusterSecrets.omni.sidero.dev
+        #   - InfraMachineBMCConfigs.omni.sidero.dev
+        #   - InfraMachineConfigs.omni.sidero.dev
+        #   - NodeForceDestroyRequests.omni.sidero.dev
+        #   - InfraProviders.omni.sidero.dev
+
+    # -- Stripe integration
+    # stripe:
+      # enabled: false
+
+  ## Storage Configuration
+  storage:
+    # -- Default storage backend configuration
+    default:
+      # -- Storage kind: etcd or boltdb
+      # kind: etcd
+
+      # -- BoltDB configuration
+      # boltdb:
+        ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+        # path: "_out/omni.db"
+
+      # -- Etcd configuration
+      etcd:
+        # -- Use embedded etcd
+        embedded: true
+        # -- Data directory for embedded etcd
+        ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+        # embeddedDBPath: "_out/etcd/"
+        # -- File containing private key to decrypt master key slot
+        privateKeySource: file:///omni.asc
+        # -- File containing public keys for master key encryption
+        # publicKeyFiles: []
+        # -- External etcd endpoints
+        # endpoints: []
+        # -- TLS files for external etcd
+        # caFile: etcd/ca.crt
+        # certFile: etcd/client.crt
+        # keyFile: etcd/client.key
+        # -- Keepalive settings
+        # dialKeepAliveTime: 30s
+        # dialKeepAliveTimeout: 5s
+        # -- TODO COMMENTS
+        # embeddedUnsafeFsync: false
+        # runElections: false
+
+    # -- Vault integration
+    # vault:
+      # -- Vault URL
+      # url: https://vault.example.com
+      # -- Vault Token (DO NOT use this, provide via secret or existingSecret)
+      # token: ""
+
+    # -- Secondary fast-changing storage (BoltDB)
+    # secondary:
+      ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+      # path: "_out/secondary-storage/bolt.db"
+
+    # -- SQLite storage configuration
+    sqlite:
+      # -- SQLite path for secondary storage
+      ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+      path: "_out/secondary-storage/sqlite.db"
+
+  ## Backup Configuration
+  # etcdBackup:
+    # -- Local path to store etcd snapshots
+    ## NOTE: If you change this path, ensure you create an additional Volume and VolumeMount for the new location.
+    # localPath: "_out/etcd-backups"
+    # -- Whether to upload backups to S3 (disabled)
+    # s3Enabled: false
+    # -- How frequently to check if a new backup is required
+    # tickInterval: 1m0s
+    # -- Minimum time between backups
+    # minInterval: 1h0m0s
+    # -- Maximum time allowed before forcing a new backup
+    # maxInterval: 24h0m0s
+    # -- Bandwidth limits (0 = unlimited)
+    # uploadLimitMbps: 0
+    # downloadLimitMbps: 0
+    # -- Random jitter added to backup schedule
+    # jitter: 10m0s
+
+  ## Registry Configuration
+  # registries:
+    # -- Default repository for Talos installer images
+    # talos: ghcr.io/siderolabs/installer
+    # -- Default repository for Kubelet images
+    # kubernetes: ghcr.io/siderolabs/kubelet
+    # -- Base URL for the Sidero Image Factory
+    # imageFactoryBaseURL: https://factory.talos.dev
+    # -- Optional base URL for PXE booting via Image Factory
+    # imageFactoryPXEBaseURL: ""
+    # -- List of registry mirrors to use
+    # mirrors: []
+
+  ## Debug Configuration
+  # debug:
+    # -- Debug server configuration
+    # server:
+      # -- Endpoint for the debug server
+      # endpoint: :9988
+    # -- Profiling configuration
+    # pprof:
+      # -- Endpoint for Go pprof profiling (empty = disabled)
+      # endpoint: ""
+
+  ## Feature Flags
+  # features:
+    # -- Allow using pre-release versions of Talos Linux
+    # enableTalosPreReleaseVersions: false
+    # -- Enable "Break Glass" configuration (emergency access)
+    # enableBreakGlassConfigs: false
+    # -- Compress configuration data in the database
+    # enableConfigDataCompression: true
+    # -- Allow importing existing Talos clusters into Omni
+    # enableClusterImport: true
+    # -- Disable caching in the controller runtime
+    # disableControllerRuntimeCache: false
+
+# -- Environment variables to pass to Omni
+env: []
+
+# -- envForm to pass to Omni
+envFrom: []
+# - configMapRef:
+#     name: config-map-name
+# - secretRef:
+#     name: secret-name
+
+# -- Etcd Encryption Key Configuration
+## This secret contains the GPG private key required to decrypt Omni's master key.
+## Without this key, Omni cannot decrypt its database and will fail to start.
+etcdEncryptionKey:
+  # -- Name of an existing Secret containing the GPG private key.
+  # -- IMPORTANT: The existing secret MUST contain a data key named exactly "omni.asc".
+  # -- If your secret uses a different key, Omni will not find the file.
+  # -- Example creation: kubectl create secret generic omni-key --from-file=omni.asc=./private.key
+  existingSecret: ""
+  # -- If 'existingSecret' is empty, a new Secret will be created using this data.
+  data:
+    # -- The GPG private key content (multiline string).
+    # The key name here must remain "omni.asc".
+    omni.asc: |-
+      -----BEGIN PGP PRIVATE KEY BLOCK-----
+      Version: GnuPG v2
+
+      mQENBF+... (your key content here) ...
+      ...
+      -----END PGP PRIVATE KEY BLOCK-----
+
+# -- Ingress Configuration
+## This section configures standard Kubernetes Ingress resources.
+## Use this if you are using an Ingress Controller like NGINX, Traefik, or HAProxy.
+ingress:
+  # -- Ingress for the Web UI
+  ui:
+    enabled: false
+    # -- Additional Annotations
+    annotations: {}
+    # -- Additional Labels
+    labels: {}
+    # -- Ingress Class Name
+    className: ""
+    # -- Omni UI hostname
+    host: omni.example.com
+    # -- TLS configuration
+    tls: {}
+    #  - secretName: omni-ui-tls
+    #    hosts:
+    #      - omni.example.com
+
+  # -- Ingress for the gRPC API
+  grpc:
+    enabled: false
+    # -- Additional Annotations
+    annotations: {}
+    ## Example annotations for NGINX Ingress:
+    # nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    # nginx.ingress.kubernetes.io/proxy-body-size: 32m
+    # nginx.ingress.kubernetes.io/service-upstream: "true"
+    # -- Additional Labels
+    labels: {}
+    # -- Ingress Class Name
+    className: ""
+    # -- Omni GRPC hostname
+    host: omni.example.com
+    # -- TLS configuration
+    tls: {}
+    #  - secretName: omni-grpc-tls
+    #    hosts:
+    #      - omni.example.com
+
+  # -- Ingress for the Kubernetes Proxy
+  kubernetesProxy:
+    enabled: false
+    # -- Additional Annotations
+    annotations: {}
+    # -- Additional Labels
+    labels: {}
+    # -- Ingress Class Name
+    className: ""
+    # -- Omni Kubernetes Proxy hostname
+    host: kubernetes.omni.example.com
+    # -- TLS configuration
+    tls: {}
+    #  - secretName: omni-k8s-proxy-tls
+    #    hosts:
+    #      - kubernetes.omni.example.com
+
+  # -- Ingress for the SideroLink Machine API
+  siderolinkApi:
+    enabled: false
+    # -- Additional Annotations
+    annotations: {}
+    ## Example annotations for NGINX Ingress:
+    # nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    # nginx.ingress.kubernetes.io/proxy-body-size: 100m
+    # -- Additional Labels
+    labels: {}
+    # -- Ingress Class Name
+    className: ""
+    # -- Omni SideroLink Machine API hostname
+    host: siderolink.omni.example.com
+    # -- TLS configuration
+    tls: {}
+    #  - secretName: omni-siderolink-tls
+    #    hosts:
+    #      - siderolink.omni.example.com
+
+# -- Gateway API Configuration
+## NOTE: Gateway API support is in EXPERIMENTAL status
+## Support depends on your Gateway controller implementation
+gatewayApi:
+  # -- Route for the Web UI
+  ui:
+    enabled: false
+    # -- Additional Annotations
+    annotations: {}
+    # -- Additional Annotations
+    labels: {}
+    # -- Name of the HTTPRoute resource
+    name: omni-ui
+    # -- The Gateway(s) to attach this route to.
+    # -- You MUST define at least one parentRef for the route to be active.
+    parentRefs: []
+      # - name: my-gateway
+      #   namespace: my-gateway-namespace
+      #   sectionName: https-listener
+    # -- Omni UI hostname
+    hostnames:
+      - omni.example.com
+
+  # -- Route for the main gRPC API
+  grpc:
+    enabled: false
+    # -- Additional Annotations
+    annotations: {}
+    # -- Additional Annotations
+    labels: {}
+    # -- Name of the GRPCRoute resource
+    name: omni-grpc
+    # -- The Gateway(s) to attach this route to.
+    # -- You MUST define at least one parentRef for the route to be active.
+    parentRefs: []
+      # - name: my-gateway
+      #   namespace: my-gateway-namespace
+      #   sectionName: https-listener
+    # -- Omni GRPC hostname
+    hostnames:
+      - omni.example.com
+
+  # -- Route for the Kubernetes Proxy
+  kubernetesProxy:
+    enabled: false
+    # -- Additional Annotations
+    annotations: {}
+    # -- Additional Annotations
+    labels: {}
+    # -- Name of the HTTPRoute resource
+    name: omni-k8s-proxy
+    # -- The Gateway(s) to attach this route to.
+    # -- You MUST define at least one parentRef for the route to be active.
+    parentRefs: []
+      # - name: my-gateway
+      #   namespace: my-gateway-namespace
+      #   sectionName: https-listener
+    # -- Omni Kubernetes Proxy hostname
+    hostnames:
+      - kubernetes-omni.example.com
+
+  # -- Route for the SideroLink Machine API
+  siderolinkApi:
+    enabled: false
+    # -- Additional Annotations
+    annotations: {}
+    # -- Additional Annotations
+    labels: {}
+    # -- Name of the GRPCRoute resource
+    name: omni-siderolink
+    # -- The Gateway(s) to attach this route to.
+    # -- You MUST define at least one parentRef for the route to be active.
+    parentRefs: []
+      # - name: my-gateway
+      #   namespace: my-gateway-namespace
+      #   sectionName: https-listener
+    # -- Omni SideroLink Machine API hostname
+    hostnames:
+      - siderolink-omni.example.com
+
+# -- Probes Configuration
+livenessProbe: {}
+readinessProbe: {}
+
+# -- Persistence Configuration
+## This volume stores all critical state: the internal database (etcd/sqlite), encryption keys, 
+## generated machine configurations, and logs. 
+## If disabled, all cluster state and identity will be lost upon pod restart.
+persistence:
+  # -- Enable persistence
+  # -- Mounts to `/_out` inside the container.
+  enabled: true
+  # -- Annotations
   annotations: {}
-  name: ""
+  # -- Name of an existing PersistentVolumeClaim to use.
+  # -- If set, a new PVC will NOT be created.
+  existingClaim: ""
+  # -- Storage Class to use for the PVC.
+  # -- Leave empty to use the cluster's default storage class.
+  storageClassName: ""
+  # -- Access modes for the PVC.
+  # -- 'ReadWriteOnce' is recommended as Omni does not support multiple active replicas writing to the same file-based DB.
+  accessModes:
+    - ReadWriteOnce
+  # -- Size of the persistent volume.
+  # -- Recommended: 16Gi+ for production to handle etcd snapshots and logs.
+  size: 16Gi
 
-podAnnotations: {}
+# -- Resources Configuration
+## Set CPU and Memory resource requests and limits for the Omni pod.
+resources: {}
+# limits:
+#   cpu: 100m
+#   memory: 128Mi
+# requests:
+#   cpu: 100m
+#   memory: 128Mi
 
-podLabels: {}
-
-podSecurityContext: {}
-
+# -- Pod Security Context
+## Omni container-level security context
 securityContext:
   allowPrivilegeEscalation: false
   capabilities:
@@ -41,311 +660,68 @@ securityContext:
     add:
       - NET_ADMIN
 
-# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+# -- Service Configuration
+## Configures the Kubernetes Services to expose Omni's network endpoints.
+## - 'main': Exposes the API, UI, and internal gRPC services (ClusterIP by default).
+## - 'wireguard': Exposes the UDP WireGuard interface for SideroLink (NodePort/LoadBalancer required for external access).
 service:
+  # -- Main Service (API, UI, SideroLink gRPC, K8s Proxy)
   main:
-    # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+    # -- Additional Annotations
+    annotations: {}
+    # Default: ClusterIP
     type: ClusterIP
-    # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+    # -- Service Ports
+    # API & Web UI
     omniPort: 8080
+    # Kubernetes API Proxy
     k8sProxyPort: 8095
+    # SideroLink Machine API
     siderolinkApiPort: 8090
+    # -- Explicit ClusterIP
     clusterIP: ""
-    annotations: {}
+  # -- WireGuard Service
   wireguard:
+    # -- Additional Annotations
+    annotations: {}
+    # Recommended: NodePort (for direct node access) or LoadBalancer (if cloud provider supports UDP)
     type: NodePort
+    # -- Internal port
     port: 50180
+    # -- External NodePort
     nodePort: 30180
+    # -- Explicit ClusterIP
     clusterIP: ""
-    annotations: {}
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
-ingress:
-  ui:
-    enabled: false
-    className: ""
-    host: omni.example.com
-    annotations: {}
-    tls: {}
-      # secretName: omni-tls
-  grpc:
-    enabled: false
-    className: ""
-    host: omni.example.com
-    annotations: {}
-      # nginx.ingress.kubernetes.io/backend-protocol: GRPC
-      # nginx.ingress.kubernetes.io/proxy-body-size: 32m
-      # nginx.ingress.kubernetes.io/service-upstream: "true"
-    tls: {}
-      # secretName: omni-tls
-  siderolinkApi:
-    enabled: false
-    className: ""
-    host: siderolink.omni.example.com
-    annotations: {}
-      # nginx.ingress.kubernetes.io/backend-protocol: GRPC
-    tls: {}
-      # secretName: omni-siderolink-api-tls
-  kubernetesProxy:
-    enabled: false
-    className: ""
-    host: kubernetes.omni.example.com
-    annotations: {}
-    tls: {}
-    # secretName: omni-kubernetes-proxy-tls
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
 
-resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+# -- List of additional mounts to add (normally used with extraVolumes)
+extraVolumeMounts: []
 
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe: {}
-readinessProbe: {}
-
-# Additional volumes on the output Deployment definition.
-volumes: []
-  # - name: omni-asc
-  #   secret:
-  #     secretName: omni-asc
-  #     optional: false
-  # - name: foo
-  #   secret:
-  #     secretName: mysecret
-  #     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-  # - name: omni-asc
-  #   mountPath: /omni.asc
-  #   readOnly: true
-  # - name: foo
-  #   mountPath: "/etc/foo"
-  #   readOnly: true
-
-nodeSelector: {}
-
-tolerations: []
+# -- List of extra volumes to add
+extraVolumes: []
 
 affinity: {}
 
-persistence:
-  # -- Enable persistence
-  enabled: true
-  # -- Existing claim
-  existingClaim: ""
-  # -- Storage class name
-  storageClassName: ""
-  # -- Access modes
-  accessModes:
-    - ReadWriteOnce
-  # -- Size for the database PVC
-  size: 16Gi
-  # -- Annotations to add to the PVC
-  annotations: {}
+nodeSelector: {}
 
-secret:
-  annotations: {}
-  env: {}
-    # -- REQUIRED: The vault token.
-    # VAULT_TOKEN: ""
+podAnnotations: {}
 
-# -- Name of an existing Secret object to use for environment variables.
-existingSecret: ""
+podLabels: {}
 
-config:
-  account:
-    id: edd2822a-7834-4fe0-8172-cc5581f13a8d
-    name: default
-    # userPilot:
-    #   appToken: ""
-  services:
-    api:
-      # endpoint: 0.0.0.0:8080
-      advertisedURL: https://omni.example.com
-      # certFile: ""
-      # keyFile: ""
-    # devServerProxy:
-    #   endpoint: ""
-    #   advertisedURL: ""
-    #   certFile: ""
-    #   keyFile: ""
-    #   proxyTo: ""
-    # metrics:
-    #   endpoint: 0.0.0.0:2122
-    #   advertisedURL: ""
-    #   certFile: ""
-    #   keyFile: ""
-    kubernetesProxy:
-      # endpoint: 0.0.0.0:8095
-      advertisedURL: https://kubernetes.omni.example.com
-      # certFile: ""
-      # keyFile: ""
-    siderolink:
-      wireGuard:
-        # endpoint: 0.0.0.0:50180
-        advertisedEndpoint: IP_HERE:30180
-      # joinTokensMode: legacy
-      # disableLastEndpoint: false
-      # useGRPCTunnel: false
-      # eventSinkPort: 8090
-      # logServerPort: 8092
-    machineAPI:
-      endpoint: https://siderolink.omni.example.com # TODO: probably needs to be advertisedURL instead
-      # advertisedURL: ""
-      # certFile: ""
-      # keyFile: ""
-    # localResourceService:
-    #   enabled: true
-    #   port: 8081
-    embeddedDiscoveryService:
-      # enabled: true
-      # port: 8093
-      # snapshotsEnabled: true
-      snapshotsPath: /data/secondary-storage/discovery-service-state.binpb
-      # snapshotsInterval: 10m0s
-      # logLevel: warn
-    # loadBalancer:
-    #   minPort: 10000
-    #   maxPort: 35000
-    #   dialTimeout: 15s
-    #   keepAlivePeriod: 30s
-    #   tcpUserTimeout: 30s
-    #   healthCheckInterval: 20s
-    #   healthCheckTimeout: 15s
-    # workloadProxy:
-    #   subdomain: proxy-us
-    #   enabled: true
-    #   stopLBsAfter: 5m0s
-  auth:
-    auth0:
-      # initialUsers: []
-      domain: example.eu.auth0.com
-      clientID: CLIENT_ID_HERE
-      # useFormData: false
-      # enabled: false
-    # webauthn:
-    #   enabled: false
-    #   required: false
-    # saml:
-    #   labelRules: {}
-    #   attributeRules: {}
-    #   url: ""
-    #   metadata: ""
-    #   nameIDFormat: ""
-    #   enabled: false
-    # oidc:
-    #   providerURL: ""
-    #   clientID: ""
-    #   clientSecret: ""
-    #   logoutURL: ""
-    #   scopes: []
-    #   enabled: false
-    #   allowUnverifiedEmail: false
-    initialUsers:
-      - initial-user-1@example.com
-      - initial-user-2@example.com
-    # keyPruner:
-    #   interval: 10m0s
-    # suspended: false
-    # initialServiceAccount:
-    #   role: Admin
-    #   keyPath: _out/initial-service-account-key
-    #   name: automation
-    #   lifetime: 1h0m0s
-    #   enabled: false
-  logs:
-    machine:
-      storage:
-        # enabled: true
-        path: /data/logs
-        # flushPeriod: 10m0s
-        # flushJitter: 0.1
-        # numCompressedChunks: 5
-      # bufferInitialCapacity: 16384
-      # bufferMaxCapacity: 131072
-      # bufferSafetyGap: 256
-    audit:
-      path: /data/audit
-    # resourceLogger:
-    #   logLevel: info
-    #   types:
-    #     - Identities.omni.sidero.dev
-    #     - Users.omni.sidero.dev
-    #     - AccessPolicies.omni.sidero.dev
-    #     - SAMLLabelRules.omni.sidero.dev
-    #     - JoinTokens.omni.sidero.dev
-    #     - DefaultJoinTokens.omni.sidero.dev
-    #     - Clusters.omni.sidero.dev
-    #     - ConfigPatches.omni.sidero.dev
-    #     - EtcdManualBackups.omni.sidero.dev
-    #     - MachineClasses.omni.sidero.dev
-    #     - MachineLabels.omni.sidero.dev
-    #     - MachineSets.omni.sidero.dev
-    #     - MachineSetNodes.omni.sidero.dev
-    #     - EtcdBackupS3Configs.omni.sidero.dev
-    #     - ExtensionsConfigurations.omni.sidero.dev
-    #     - KernelArgs.omni.sidero.dev
-    #     - MachineRequestSets.omni.sidero.dev
-    #     - ImportedClusterSecrets.omni.sidero.dev
-    #     - InfraMachineBMCConfigs.omni.sidero.dev
-    #     - InfraMachineConfigs.omni.sidero.dev
-    #     - NodeForceDestroyRequests.omni.sidero.dev
-    #     - InfraProviders.omni.sidero.dev
-    # stripe:
-    #   enabled: false
-  storage:
-    default:
-      kind: etcd
-      boltdb:
-        path: /data/omni.db
-      etcd:
-        # endpoints:
-        #   - http://localhost:2379
-        # dialKeepAliveTime: 30s
-        # dialKeepAliveTimeout: 5s
-        # caFile: etcd/ca.crt
-        # certFile: etcd/client.crt
-        # keyFile: etcd/client.key
-        # embedded: true
-        embeddedDBPath: /data/etcd/
-        # embeddedUnsafeFsync: false
-        # runElections: false
-        # privateKeySource: ""
-        # publicKeyFiles: []
-    vault:
-      url: https://vault.example.com
-      # token: "" # DO NOT use this, provide via secret or existingSecret
-    secondary:
-      path: /data/secondary-storage/bolt.db
-    sqlite:
-      path: /data/secondary-storage/sqlite.db
-  etcdBackup:
-    localPath: /data/etcd-backups
-    # s3Enabled: false
-    # tickInterval: 1m0s
-    # minInterval: 1h0m0s
-    # maxInterval: 24h0m0s
-    # uploadLimitMbps: 0
-    # downloadLimitMbps: 0
-    # jitter: 10m0s
-  # registries:
-  #   talos: ghcr.io/siderolabs/installer
-  #   kubernetes: ghcr.io/siderolabs/kubelet
-  #   imageFactoryBaseURL: https://factory.talos.dev
-  #   imageFactoryPXEBaseURL: ""
-  #   mirrors: []
-  # debug:
-  #   server:
-  #     endpoint: :9988
-  #   pprof:
-  #     endpoint: ""
-  # features:
-  #   enableTalosPreReleaseVersions: false
-  #   enableBreakGlassConfigs: false
-  #   enableConfigDataCompression: true
-  #   enableClusterImport: true
-  #   disableControllerRuntimeCache: false
+podSecurityContext: {}
+
+tolerations: []
+
+## -- Extra Kubernetes objects to deploy with the helm chart
+extraObjects: []
+  # - apiVersion: v1
+  #   kind: ConfigMap
+  #   metadata:
+  #     name: omni-example
+  #   data:
+  #     custom-setting: "true"
