@@ -444,8 +444,7 @@ etcdEncryptionKey:
   # -- If 'existingSecret' is empty, a new Secret will be created using this data.
   data:
     # -- The GPG private key content (multiline string).
-    # The key name here must remain "omni.asc".
-    omni.asc: |-
+    omniAsc: |-
       -----BEGIN PGP PRIVATE KEY BLOCK-----
       Version: GnuPG v2
 
