@@ -18,9 +18,7 @@ spec:
   {{- end }}
   {{- if .Values.ingress.siderolinkApi.tls }}
   tls:
-    - hosts:
-        - {{ .Values.ingress.siderolinkApi.host | quote }}
-      secretName: {{ .Values.ingress.siderolinkApi.tls.secretName }}
+    {{- toYaml .Values.ingress.siderolinkApi.tls | nindent 4 }}
   {{- end }}
   rules:
     - host: {{ .Values.ingress.siderolinkApi.host | quote }}

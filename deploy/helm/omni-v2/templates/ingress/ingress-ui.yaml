@@ -18,9 +18,7 @@ spec:
   {{- end }}
   {{- if .Values.ingress.ui.tls }}
   tls:
-    - hosts:
-        - {{ .Values.ingress.ui.host | quote }}
-      secretName: {{ .Values.ingress.ui.tls.secretName }}
+    {{- toYaml .Values.ingress.ui.tls | nindent 4 }}
   {{- end }}
   rules:
     - host: {{ .Values.ingress.ui.host | quote }}

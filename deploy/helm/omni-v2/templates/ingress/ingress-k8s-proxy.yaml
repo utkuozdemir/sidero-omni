@@ -18,9 +18,7 @@ spec:
   {{- end }}
   {{- if .Values.ingress.kubernetesProxy.tls }}
   tls:
-    - hosts:
-        - {{ .Values.ingress.kubernetesProxy.host | quote }}
-      secretName: {{ .Values.ingress.kubernetesProxy.tls.secretName }}
+    {{- toYaml .Values.ingress.kubernetesProxy.tls | nindent 4 }}
   {{- end }}
   rules:
     - host: {{ .Values.ingress.kubernetesProxy.host | quote }}
