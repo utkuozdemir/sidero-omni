@@ -468,7 +468,7 @@ ingress:
     # -- Omni UI hostname
     host: omni.example.com
     # -- TLS configuration
-    tls: {}
+    tls: []
     #  - secretName: omni-ui-tls
     #    hosts:
     #      - omni.example.com
@@ -489,7 +489,7 @@ ingress:
     # -- Omni GRPC hostname
     host: omni.example.com
     # -- TLS configuration
-    tls: {}
+    tls: []
     #  - secretName: omni-grpc-tls
     #    hosts:
     #      - omni.example.com
@@ -506,7 +506,7 @@ ingress:
     # -- Omni Kubernetes Proxy hostname
     host: kubernetes.omni.example.com
     # -- TLS configuration
-    tls: {}
+    tls: []
     #  - secretName: omni-k8s-proxy-tls
     #    hosts:
     #      - kubernetes.omni.example.com
@@ -526,7 +526,7 @@ ingress:
     # -- Omni SideroLink Machine API hostname
     host: siderolink.omni.example.com
     # -- TLS configuration
-    tls: {}
+    tls: []
     #  - secretName: omni-siderolink-tls
     #    hosts:
     #      - siderolink.omni.example.com
