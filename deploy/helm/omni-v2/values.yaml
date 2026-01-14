@@ -544,8 +544,6 @@ gatewayApi:
     annotations: {}
     # -- Additional Annotations
     labels: {}
-    # -- Name of the HTTPRoute resource
-    name: omni-ui
     # -- The Gateway(s) to attach this route to.
     # -- You MUST define at least one parentRef for the route to be active.
     parentRefs: []
@@ -563,8 +561,6 @@ gatewayApi:
     annotations: {}
     # -- Additional Annotations
     labels: {}
-    # -- Name of the GRPCRoute resource
-    name: omni-grpc
     # -- The Gateway(s) to attach this route to.
     # -- You MUST define at least one parentRef for the route to be active.
     parentRefs: []
@@ -582,8 +578,6 @@ gatewayApi:
     annotations: {}
     # -- Additional Annotations
     labels: {}
-    # -- Name of the HTTPRoute resource
-    name: omni-k8s-proxy
     # -- The Gateway(s) to attach this route to.
     # -- You MUST define at least one parentRef for the route to be active.
     parentRefs: []
@@ -601,8 +595,6 @@ gatewayApi:
     annotations: {}
     # -- Additional Annotations
     labels: {}
-    # -- Name of the GRPCRoute resource
-    name: omni-siderolink
     # -- The Gateway(s) to attach this route to.
     # -- You MUST define at least one parentRef for the route to be active.
     parentRefs: []
@@ -709,8 +701,6 @@ metrics:
     labels: {}
     # -- Metrics service port
     servicePort: 2122
-    # -- Metrics service port name
-    portName: metrics
   serviceMonitor:
     # -- Enable a prometheus ServiceMonitor
     enabled: false

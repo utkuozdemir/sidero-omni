@@ -2,7 +2,7 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: {{ .Values.gatewayApi.ui.name }}
+  name: {{ include "omni-v2.fullname" . }}-ui
   namespace: {{ include "omni-v2.namespace" . }}
   labels:
     {{- include "omni-v2.labels" . | nindent 4 }}

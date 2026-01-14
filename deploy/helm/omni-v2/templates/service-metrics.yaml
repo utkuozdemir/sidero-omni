@@ -19,7 +19,7 @@ spec:
   clusterIP: {{ .Values.metrics.service.clusterIP }}
   {{- end }}
   ports:
-  - name: {{ .Values.metrics.service.portName }}
+  - name: metrics
     protocol: TCP
     port: {{ .Values.metrics.service.servicePort }}
     targetPort: metrics
