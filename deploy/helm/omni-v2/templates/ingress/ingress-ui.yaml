@@ -3,6 +3,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "omni-v2.fullname" . }}-ui
+  namespace: {{ include "omni-v2.namespace" . }}
   labels:
     {{- include "omni-v2.labels" . | nindent 4 }}
     {{- with .Values.ingress.ui.labels }}

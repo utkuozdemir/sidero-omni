@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "omni-v2.fullname" . }}
+  namespace: {{ include "omni-v2.namespace" . }}
   labels:
     {{- include "omni-v2.labels" . | nindent 4 }}
 spec:
@@ -65,6 +66,9 @@ spec:
               protocol: TCP
             - name: k8s-proxy
               containerPort: 8095
+              protocol: TCP
+            - name: metrics
+              containerPort: 2122
               protocol: TCP
             - name: wireguard
               containerPort: 50180

@@ -3,6 +3,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
   name: {{ .Values.gatewayApi.siderolinkApi.name }}
+  namespace: {{ include "omni-v2.namespace" . }}
   labels:
     {{- include "omni-v2.labels" . | nindent 4 }}
     {{- with .Values.gatewayApi.siderolinkApi.labels }}

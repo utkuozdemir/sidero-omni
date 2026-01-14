@@ -2,6 +2,8 @@
 nameOverride: "omni"
 # -- String to fully override `"omni-v2.fullname"`
 fullnameOverride: ""
+# -- String to fully override `"omni-v2.namespace"`
+namespaceOverride: ""
 
 # -- Omni currently only supports a single replica.
 ## If embedded etcd is used, this value should remain at 1.
@@ -691,6 +693,64 @@ service:
     nodePort: 30180
     # -- Explicit ClusterIP
     clusterIP: ""
+
+## Omni metrics configuration
+metrics:
+  # -- Deploy metrics service
+  enabled: false
+  service:
+    # -- Metrics service type
+    type: ClusterIP
+    # -- Metrics service clusterIP. `None` makes a "headless service" (no virtual IP)
+    clusterIP: ""
+    # -- Metrics service annotations
+    annotations: {}
+    # -- Metrics service labels
+    labels: {}
+    # -- Metrics service port
+    servicePort: 2122
+    # -- Metrics service port name
+    portName: metrics
+  serviceMonitor:
+    # -- Enable a prometheus ServiceMonitor
+    enabled: false
+    # -- Prometheus ServiceMonitor interval
+    interval: 30s
+    # -- Prometheus ServiceMonitor scrapeTimeout. If empty, Prometheus uses the global scrape timeout unless it is less than the target's scrape interval value in which the latter is used.
+    scrapeTimeout: ""
+    # -- When true, honorLabels preserves the metric’s labels when they collide with the target’s labels.
+    honorLabels: false
+    # -- Prometheus [RelabelConfigs] to apply to samples before scraping
+    relabelings: []
+    # -- Prometheus [MetricRelabelConfigs] to apply to samples before ingestion
+    metricRelabelings: []
+    # -- Prometheus ServiceMonitor selector
+    scheme: ""
+    # -- Prometheus ServiceMonitor tlsConfig
+    tlsConfig: {}
+    # -- Prometheus ServiceMonitor namespace
+    namespace: "" # "monitoring"
+    # -- Prometheus ServiceMonitor labels
+    selector: {}
+      # prometheus: kube-prometheus
+    labels: {}
+    # -- Prometheus ServiceMonitor annotations
+    annotations: {}
+  rules:
+    # -- Deploy a PrometheusRule for the application controller
+    enabled: false
+    # -- PrometheusRule namespace
+    namespace: "" # "monitoring"
+    # -- PrometheusRule selector
+    selector: {}
+      # prometheus: kube-prometheus
+    # -- PrometheusRule labels
+    labels: {}
+    # -- PrometheusRule annotations
+    annotations: {}
+
+    # -- PrometheusRule.Spec for the application controller
+    spec: []
 
 serviceAccount:
   create: true
