@@ -21,7 +21,7 @@ spec:
   rules:
     - matches:
         - method:
-            service: omni-v2.resources.ResourceService
+            service: omni.resources.ResourceService
         - method:
             service: oidc.OIDCService
         - method:

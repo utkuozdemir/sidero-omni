@@ -25,7 +25,7 @@ spec:
     - host: {{ .Values.ingress.grpc.host | quote }}
       http:
         paths:
-          - path: /omni-v2.resources.ResourceService
+          - path: /omni.resources.ResourceService
             pathType: ImplementationSpecific
             backend:
               service:
