@@ -134,7 +134,7 @@ config:
       # -- Bind address for Omni API server
       # endpoint: 0.0.0.0:8080
       # -- Public URL advertised to users and CLIs
-      advertisedURL: https://omni.omni.example.com
+      advertisedURL: https://omni.example.com
       # -- TLS certificate file (empty = TLS terminated elsewhere, e.g. ingress)
       # certFile: ""
       # -- TLS private key file
@@ -186,19 +186,19 @@ config:
       # -- TLS private key file
       # keyFile: ""
 
-    # -- SideroLink (WireGuard) configuration
+    # -- SideroLink (wireGuard) configuration
     siderolink:
-      # -- WireGuard listener configuration
+      # -- wireGuard listener configuration
       wireGuard:
-        # -- Bind address for WireGuard listener
+        # -- Bind address for wireGuard listener
         # endpoint: 0.0.0.0:50180
-        # -- Public WireGuard endpoint advertised to Talos nodes
+        # -- Public wireGuard endpoint advertised to Talos nodes
         advertisedEndpoint: IP_HERE:30180
         # -- Join flow mode (legacy or secure)
         # joinTokensMode: legacy
         # -- Whether to populate last known peer endpoint
         # disableLastEndpoint: false
-        # -- Tunnel WireGuard over gRPC instead of UDP
+        # -- Tunnel wireGuard over gRPC instead of UDP
         # useGRPCTunnel: false
         # -- Port for Talos event ingestion
         # eventSinkPort: 8090
@@ -658,7 +658,7 @@ securityContext:
 # -- Service Configuration
 ## Configures the Kubernetes Services to expose Omni's network endpoints.
 ## - 'main': Exposes the API, UI, and internal gRPC services (ClusterIP by default).
-## - 'wireguard': Exposes the UDP WireGuard interface for SideroLink (NodePort/LoadBalancer required for external access).
+## - 'wireguard': Exposes the UDP wireGuard interface for SideroLink (NodePort/LoadBalancer required for external access).
 service:
   # -- Main Service (API, UI, SideroLink gRPC, K8s Proxy)
   main:
@@ -675,7 +675,7 @@ service:
     siderolinkApiPort: 8090
     # -- Explicit ClusterIP
     clusterIP: ""
-  # -- WireGuard Service
+  # -- wireGuard Service
   wireguard:
     # -- Additional Annotations
     annotations: {}

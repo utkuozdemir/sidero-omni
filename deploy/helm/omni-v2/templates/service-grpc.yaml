@@ -12,7 +12,7 @@ metadata:
 spec:
   type: {{ .Values.service.main.type }}
   {{- with .Values.service.main.clusterIP }}
-  clusterIP: {{ . | quote}}
+  clusterIP: {{ . | quote }}
   {{- end }}
   ports:
     - name: omni
