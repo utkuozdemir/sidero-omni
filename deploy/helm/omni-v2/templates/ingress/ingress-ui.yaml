@@ -5,10 +5,10 @@ metadata:
   name: {{ include "omni-v2.fullname" . }}-ui
   namespace: {{ include "omni-v2.namespace" . }}
   labels:
-    {{- include "omni-v2.labels" . | nindent 4 }}
-    {{- with .Values.ingress.ui.labels }}
-      {{- toYaml . | nindent 4 }}
-    {{- end }}
+  {{- include "omni-v2.labels" . | nindent 4 }}
+  {{- with .Values.ingress.ui.labels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with .Values.ingress.ui.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

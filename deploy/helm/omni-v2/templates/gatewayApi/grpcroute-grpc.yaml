@@ -5,10 +5,10 @@ metadata:
   name: {{ include "omni-v2.fullname" . }}-grpc
   namespace: {{ include "omni-v2.namespace" . }}
   labels:
-    {{- include "omni-v2.labels" . | nindent 4 }}
-    {{- with .Values.gatewayApi.grpc.labels }}
-      {{- toYaml . | nindent 4 }}
-    {{- end }}
+  {{- include "omni-v2.labels" . | nindent 4 }}
+  {{- with .Values.gatewayApi.grpc.labels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with .Values.gatewayApi.grpc.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

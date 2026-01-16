@@ -1,5 +1,5 @@
-# -- Provide a name in place of `omni`
-nameOverride: "omni"
+# -- Provide a name in place of `"omni-v2"`
+nameOverride: ""
 # -- String to fully override `"omni-v2.fullname"`
 fullnameOverride: ""
 # -- String to fully override `"omni-v2.namespace"`
@@ -346,8 +346,10 @@ config:
         # -- Keepalive settings
         # dialKeepAliveTime: 30s
         # dialKeepAliveTimeout: 5s
-        # -- TODO COMMENTS
+        # -- Advanced settings for embedded and external etcd (use with care)
+        # -- Disables fsync for embedded etcd to improve performance at the cost of durability; intended only for testing.
         # embeddedUnsafeFsync: false
+        # -- Enables Omni instances to participate in leader elections when multiple instances share the same etcd backend.
         # runElections: false
 
     # -- Vault integration
@@ -427,7 +429,7 @@ config:
 # -- Environment variables to pass to Omni
 env: []
 
-# -- envForm to pass to Omni
+# -- envFrom to pass to Omni
 envFrom: []
 # - configMapRef:
 #     name: config-map-name
@@ -542,7 +544,7 @@ gatewayApi:
     enabled: false
     # -- Additional Annotations
     annotations: {}
-    # -- Additional Annotations
+    # -- Additional Labels
     labels: {}
     # -- The Gateway(s) to attach this route to.
     # -- You MUST define at least one parentRef for the route to be active.
@@ -559,7 +561,7 @@ gatewayApi:
     enabled: false
     # -- Additional Annotations
     annotations: {}
-    # -- Additional Annotations
+    # -- Additional Labels
     labels: {}
     # -- The Gateway(s) to attach this route to.
     # -- You MUST define at least one parentRef for the route to be active.
@@ -576,7 +578,7 @@ gatewayApi:
     enabled: false
     # -- Additional Annotations
     annotations: {}
-    # -- Additional Annotations
+    # -- Additional Labels
     labels: {}
     # -- The Gateway(s) to attach this route to.
     # -- You MUST define at least one parentRef for the route to be active.
@@ -593,7 +595,7 @@ gatewayApi:
     enabled: false
     # -- Additional Annotations
     annotations: {}
-    # -- Additional Annotations
+    # -- Additional Labels
     labels: {}
     # -- The Gateway(s) to attach this route to.
     # -- You MUST define at least one parentRef for the route to be active.
