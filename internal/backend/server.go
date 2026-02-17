@@ -116,6 +116,9 @@ type Server struct {
 	dnsService              *dns.Service
 	workloadProxyReconciler *workloadproxy.Reconciler
 	imageFactoryClient      *imagefactory.Client
+	siderolinkManager       *siderolink.Manager
+	siderolinkParams        siderolink.Params
+	kmsManager              *kms.Manager
 	installEventCh          chan<- resource.ID
 	linkCounterDeltaCh      chan<- siderolink.LinkCounterDeltas
 	siderolinkEventsCh      chan<- *omnires.MachineStatusSnapshot
@@ -179,9 +182,13 @@ func NewServer(
 
 // Run runs everything.
 func (s *Server) Run(ctx context.Context) error {
+	if err := s.initMachineAPI(ctx); err != nil {
+		return fmt.Errorf("failed to initialize machine API: %w", err)
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 
-	s.omniRuntime.Run(ctx, eg)
+	eg.Go(func() error { return s.omniRuntime.Run(ctx) })
 
 	runtimeState := s.state.Default()
 	oidcStorage := oidc.NewStorage(runtimeState, s.logger)
@@ -595,11 +602,12 @@ func (s *Server) authenticatorFunc() auth.AuthenticatorFunc {
 	}
 }
 
-func (s *Server) runMachineAPI(ctx context.Context) error {
-	wgAddress := s.cfg.Services.Siderolink.WireGuard.GetEndpoint()
+func (s *Server) initMachineAPI(ctx context.Context) error {
+	omniState := s.state.Default()
+	machineEventHandler := machineevent.NewHandler(omniState, s.logger, s.siderolinkEventsCh, s.installEventCh)
 
-	params := siderolink.Params{
-		WireguardEndpoint:   wgAddress,
+	s.siderolinkParams = siderolink.Params{
+		WireguardEndpoint:   s.cfg.Services.Siderolink.WireGuard.GetEndpoint(),
 		AdvertisedEndpoint:  s.cfg.Services.Siderolink.WireGuard.GetAdvertisedEndpoint(),
 		MachineAPIEndpoint:  s.cfg.Services.MachineAPI.GetEndpoint(),
 		MachineAPITLSCert:   s.cfg.Services.MachineAPI.GetCertFile(),
@@ -610,14 +618,11 @@ func (s *Server) runMachineAPI(ctx context.Context) error {
 		DisableLastEndpoint: s.cfg.Services.Siderolink.GetDisableLastEndpoint(),
 	}
 
-	omniState := s.state.Default()
-	machineEventHandler := machineevent.NewHandler(omniState, s.logger, s.siderolinkEventsCh, s.installEventCh)
-
 	slink, err := siderolink.NewManager(
 		ctx,
 		omniState,
 		siderolink.DefaultWireguardHandler,
-		params,
+		s.siderolinkParams,
 		s.logger.With(logging.Component("siderolink")).WithOptions(
 			zap.AddStacktrace(zapcore.ErrorLevel), // prevent warn level from printing stack traces
 		),
@@ -629,17 +634,22 @@ func (s *Server) runMachineAPI(ctx context.Context) error {
 		return err
 	}
 
-	kms := kms.NewManager(
+	prometheus.MustRegister(slink)
+
+	s.siderolinkManager = slink
+	s.kmsManager = kms.NewManager(
 		omniState,
 		s.logger.With(logging.Component("kms")).WithOptions(
 			zap.AddStacktrace(zapcore.ErrorLevel), // prevent warn level from printing stack traces
 		),
 	)
 
-	prometheus.MustRegister(slink)
+	return nil
+}
 
+func (s *Server) runMachineAPI(ctx context.Context) error {
 	// start API listener
-	lis, err := params.NewListener(ctx)
+	lis, err := s.siderolinkParams.NewListener(ctx)
 	if err != nil {
 		return fmt.Errorf("error listening for Siderolink gRPC API: %w", err)
 	}
@@ -650,11 +660,11 @@ func (s *Server) runMachineAPI(ctx context.Context) error {
 		grpc.SharedWriteBuffer(true),
 	)
 
-	slink.Register(server)
-	kms.Register(server)
+	s.siderolinkManager.Register(server)
+	s.kmsManager.Register(server)
 
 	eg.Go(func() error {
-		return slink.Run(groupCtx,
+		return s.siderolinkManager.Run(groupCtx,
 			siderolink.ListenHost,
 			strconv.Itoa(s.cfg.Services.Siderolink.GetEventSinkPort()),
 			strconv.Itoa(talosconstants.TrustdPort),

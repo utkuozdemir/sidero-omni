@@ -121,7 +121,11 @@ func (suite *GrpcSuite) SetupTest() {
 }
 
 func (suite *GrpcSuite) startRuntime() {
-	suite.runtime.Run(actor.MarkContextAsInternalActor(suite.ctx), &suite.eg)
+	ctx := actor.MarkContextAsInternalActor(suite.ctx)
+
+	suite.eg.Go(func() error {
+		return suite.runtime.Run(ctx)
+	})
 }
 
 func (suite *GrpcSuite) TestGetDenied() {

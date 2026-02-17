@@ -103,7 +103,11 @@ func (suite *OmniRuntimeSuite) SetupTest() {
 }
 
 func (suite *OmniRuntimeSuite) startRuntime() {
-	suite.runtime.Run(actor.MarkContextAsInternalActor(suite.ctx), &suite.eg)
+	ctx := actor.MarkContextAsInternalActor(suite.ctx)
+
+	suite.eg.Go(func() error {
+		return suite.runtime.Run(ctx)
+	})
 }
 
 func (suite *OmniRuntimeSuite) TestCrud() {

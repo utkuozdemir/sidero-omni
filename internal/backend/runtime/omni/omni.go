@@ -467,7 +467,9 @@ func RuntimeCacheOptions() []options.Option {
 }
 
 // Run starts underlying COSI controller runtime.
-func (r *Runtime) Run(ctx context.Context, eg newgroup.EGroup) {
+func (r *Runtime) Run(ctx context.Context) error {
+	eg, ctx := newgroup.WithContext(ctx)
+
 	makeWrap := func(f func(context.Context) error, msgOnError string) func() error {
 		return func() error {
 			if err := f(ctx); err != nil {
@@ -479,27 +481,27 @@ func (r *Runtime) Run(ctx context.Context, eg newgroup.EGroup) {
 	}
 
 	if r.resourceLogger != nil {
-		newgroup.GoWithContext(ctx, eg, makeWrap(r.resourceLogger.Start, "resource logger failed"))
+		eg.Go(makeWrap(r.resourceLogger.Start, "resource logger failed"))
 	}
 
-	newgroup.GoWithContext(ctx, eg, makeWrap(r.powerStageWatcher.Run, "power stage watcher failed"))
-	newgroup.GoWithContext(ctx, eg, makeWrap(r.talosClientFactory.StartCacheManager, "talos client factory failed"))
-	newgroup.GoWithContext(ctx, eg, makeWrap(r.dnsService.Start, "dns service failed"))
-	newgroup.GoWithContext(ctx, eg, makeWrap(r.controllerRuntime.Run, "controller runtime failed"))
-	newgroup.GoWithContext(ctx, eg, makeWrap(r.workloadProxyReconciler.Run, "workload proxy reconciler failed"))
-	newgroup.GoWithContext(ctx, eg, makeWrap(r.kubernetesRuntime.StartCacheManager, "kubernetes client factory failed"))
+	eg.Go(makeWrap(r.powerStageWatcher.Run, "power stage watcher failed"))
+	eg.Go(makeWrap(r.talosClientFactory.StartCacheManager, "talos client factory failed"))
+	eg.Go(makeWrap(r.dnsService.Start, "dns service failed"))
+	eg.Go(makeWrap(r.controllerRuntime.Run, "controller runtime failed"))
+	eg.Go(makeWrap(r.workloadProxyReconciler.Run, "workload proxy reconciler failed"))
+	eg.Go(makeWrap(r.kubernetesRuntime.StartCacheManager, "kubernetes client factory failed"))
 
-	newgroup.GoWithContext(ctx, eg, func() error { return r.storeFactory.Start(ctx, r.state, r.logger) })
+	eg.Go(func() error { return r.storeFactory.Start(ctx, r.state, r.logger) })
 
-	if r.virtual == nil {
-		return
+	if r.virtual != nil {
+		eg.Go(func() error {
+			r.virtual.RunComputed(ctx, virtualres.KubernetesUsageType, producers.NewKubernetesUsageFactory(r.kubernetesRuntime), producers.KubernetesUsageResourceTransformer(r.state), r.logger)
+
+			return nil
+		})
 	}
 
-	newgroup.GoWithContext(ctx, eg, func() error {
-		r.virtual.RunComputed(ctx, virtualres.KubernetesUsageType, producers.NewKubernetesUsageFactory(r.kubernetesRuntime), producers.KubernetesUsageResourceTransformer(r.state), r.logger)
-
-		return nil
-	})
+	return eg.Wait()
 }
 
 // Watch implements runtime.Runtime.
