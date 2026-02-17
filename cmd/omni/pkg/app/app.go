@@ -42,19 +42,6 @@ import (
 
 // Run the Omni service.
 func Run(ctx context.Context, state *omni.State, cfg *config.Params, logger *zap.Logger) error {
-	talosClientFactory := talos.NewClientFactory(state.Default(), logger)
-	talosRuntime := talos.New(talosClientFactory, logger, cfg.Account.GetName(), cfg.Services.Api.URL())
-
-	oidcIssuerEndpoint, err := cfg.GetOIDCIssuerEndpoint()
-	if err != nil {
-		return fmt.Errorf("failed to get OIDC issuer endpoint: %w", err)
-	}
-
-	kubernetesRuntime := kubernetes.New(state.Default(), logger, oidcIssuerEndpoint, cfg.Account.GetName(), cfg.Services.KubernetesProxy.URL())
-
-	prometheus.MustRegister(talosClientFactory)
-	prometheus.MustRegister(kubernetesRuntime)
-
 	grpc_prometheus.EnableHandlingTimeHistogram(grpc_prometheus.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 1, 10, 30, 60, 120, 300, 600}))
 
 	logger.Debug("using config", zap.Any("config", cfg))
@@ -63,9 +50,28 @@ func Run(ctx context.Context, state *omni.State, cfg *config.Params, logger *zap
 
 	ctx = actor.MarkContextAsInternalActor(ctx)
 
+	// --- Construct: create all components ---
+
+	talosClientFactory := talos.NewClientFactory(state.Default(), logger)
+	prometheus.MustRegister(talosClientFactory)
+
+	oidcIssuerEndpoint, err := cfg.GetOIDCIssuerEndpoint()
+	if err != nil {
+		return fmt.Errorf("failed to get OIDC issuer endpoint: %w", err)
+	}
+
+	kubernetesRuntime := kubernetes.New(state.Default(), logger, oidcIssuerEndpoint, cfg.Account.GetName(), cfg.Services.KubernetesProxy.URL())
+	prometheus.MustRegister(kubernetesRuntime)
+
+	talosRuntime := talos.New(talosClientFactory, logger, cfg.Account.GetName(), cfg.Services.Api.URL())
+
 	dnsService := dns.NewService(state.Default(), logger)
-	workloadProxyReconciler := workloadproxy.NewReconciler(logger.With(logging.Component("workload_proxy_reconciler")),
-		zapcore.DebugLevel, cfg.Services.WorkloadProxy.GetStopLBsAfter())
+
+	workloadProxyReconciler := workloadproxy.NewReconciler(
+		logger.With(logging.Component("workload_proxy_reconciler")),
+		zapcore.DebugLevel,
+		cfg.Services.WorkloadProxy.GetStopLBsAfter(),
+	)
 
 	var resourceLogger *resourcelogger.Logger
 
@@ -91,10 +97,26 @@ func Run(ctx context.Context, state *omni.State, cfg *config.Params, logger *zap
 
 	prometheus.MustRegister(discoveryClientCache)
 
+	machineMap := siderolink.NewMachineMap(siderolink.NewStateStorage(state.Default()))
+
+	logHandler, err := siderolink.NewLogHandler(
+		state.SecondaryStorageDB(),
+		machineMap,
+		state.Default(),
+		&cfg.Logs.Machine,
+		logger.With(logging.Component("siderolink_log_handler")),
+		siderolink.WithLogHandlerCleanupCallback(state.SQLiteMetrics().CleanupCallback(sqlite.SubsystemMachineLogs)),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to set up log handler: %w", err)
+	}
+
+	// --- Wire: connect components, initialize state resources ---
+
 	omniRuntime, err := omni.NewRuntime(omni.RuntimeParams{
 		Cfg:                     cfg,
 		TalosClientFactory:      talosClientFactory,
-		DnsService:              dnsService,
+		DNSService:              dnsService,
 		WorkloadProxyReconciler: workloadProxyReconciler,
 		ResourceLogger:          resourceLogger,
 		ImageFactoryClient:      imageFactoryClient,
@@ -112,23 +134,8 @@ func Run(ctx context.Context, state *omni.State, cfg *config.Params, logger *zap
 		return fmt.Errorf("failed to set up the controller runtime: %w", err)
 	}
 
-	err = user.EnsureInitialResources(ctx, state.Default(), logger, cfg.Auth.InitialUsers)
-	if err != nil {
+	if err = user.EnsureInitialResources(ctx, state.Default(), logger, cfg.Auth.InitialUsers); err != nil {
 		return fmt.Errorf("failed to write initial user resources to state: %w", err)
-	}
-
-	machineMap := siderolink.NewMachineMap(siderolink.NewStateStorage(state.Default()))
-
-	logHandler, err := siderolink.NewLogHandler(
-		state.SecondaryStorageDB(),
-		machineMap,
-		state.Default(),
-		&cfg.Logs.Machine,
-		logger.With(logging.Component("siderolink_log_handler")),
-		siderolink.WithLogHandlerCleanupCallback(state.SQLiteMetrics().CleanupCallback(sqlite.SubsystemMachineLogs)),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to set up log handler: %w", err)
 	}
 
 	authConfig, err := auth.EnsureAuthConfigResource(ctx, state.Default(), logger, cfg.Auth)
@@ -181,6 +188,8 @@ func Run(ctx context.Context, state *omni.State, cfg *config.Params, logger *zap
 	if err != nil {
 		return fmt.Errorf("failed to create server: %w", err)
 	}
+
+	// --- Run: start all components ---
 
 	if err := server.Run(ctx); err != nil {
 		return fmt.Errorf("failed to run server: %w", err)

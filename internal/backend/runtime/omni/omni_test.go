@@ -96,7 +96,7 @@ func (suite *OmniRuntimeSuite) SetupTest() {
 	suite.runtime, err = omniruntime.NewRuntime(omniruntime.RuntimeParams{
 		Cfg:                     config.Default(),
 		TalosClientFactory:      clientFactory,
-		DnsService:              dnsService,
+		DNSService:              dnsService,
 		WorkloadProxyReconciler: workloadProxyReconciler,
 		State:                   mockState,
 		MetricsRegistry:         prometheus.NewRegistry(),

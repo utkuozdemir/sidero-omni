@@ -354,8 +354,7 @@ func NewAuditWrap(ctx context.Context, auditCfg config.LogsAudit, auditLogDB *sq
 
 // AuditWrap is builder/wrapper for creating logged access to Omni and Talos nodes.
 type AuditWrap struct {
-	state state.State
-	log   *audit.Log
+	log *audit.Log
 }
 
 // Reader reads the audit log file by file, oldest to newest.

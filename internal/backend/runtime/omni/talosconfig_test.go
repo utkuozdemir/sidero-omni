@@ -48,7 +48,7 @@ func TestOperatorTalosconfig(t *testing.T) {
 	r, err := omniruntime.NewRuntime(omniruntime.RuntimeParams{
 		Cfg:                     omniconfig.Default(),
 		TalosClientFactory:      clientFactory,
-		DnsService:              dnsService,
+		DNSService:              dnsService,
 		WorkloadProxyReconciler: workloadProxyReconciler,
 		State:                   st,
 		MetricsRegistry:         prometheus.NewRegistry(),

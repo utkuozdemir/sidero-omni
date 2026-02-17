@@ -92,21 +92,21 @@ type Runtime struct {
 
 // RuntimeParams groups the parameters needed to create a new Omni runtime.
 type RuntimeParams struct {
-	Cfg                  *config.Params
-	TalosClientFactory   *talos.ClientFactory
-	DnsService           *dns.Service
+	Cfg                     *config.Params
+	TalosClientFactory      *talos.ClientFactory
+	DNSService              *dns.Service
 	WorkloadProxyReconciler *workloadproxy.Reconciler
-	ResourceLogger       *resourcelogger.Logger
-	ImageFactoryClient   *imagefactory.Client
-	LinkCounterDeltaCh   <-chan siderolink.LinkCounterDeltas
-	SiderolinkEventsCh   <-chan *omni.MachineStatusSnapshot
-	InstallEventCh       <-chan cosiresource.ID
-	State                *State
-	MetricsRegistry      prometheus.Registerer
-	DiscoveryClientCache omnictrl.DiscoveryClientCache
-	KubernetesRuntime    omnictrl.KubernetesRuntime
-	TalosRuntime         omnictrl.TalosClientGetter
-	Logger               *zap.Logger
+	ResourceLogger          *resourcelogger.Logger
+	ImageFactoryClient      *imagefactory.Client
+	LinkCounterDeltaCh      <-chan siderolink.LinkCounterDeltas
+	SiderolinkEventsCh      <-chan *omni.MachineStatusSnapshot
+	InstallEventCh          <-chan cosiresource.ID
+	State                   *State
+	MetricsRegistry         prometheus.Registerer
+	DiscoveryClientCache    omnictrl.DiscoveryClientCache
+	KubernetesRuntime       omnictrl.KubernetesRuntime
+	TalosRuntime            omnictrl.TalosClientGetter
+	Logger                  *zap.Logger
 }
 
 // NewRuntime creates a new Omni runtime.
@@ -115,7 +115,7 @@ type RuntimeParams struct {
 func NewRuntime(p RuntimeParams) (*Runtime, error) {
 	cfg := p.Cfg
 	talosClientFactory := p.TalosClientFactory
-	dnsService := p.DnsService
+	dnsService := p.DNSService
 	workloadProxyReconciler := p.WorkloadProxyReconciler
 	resourceLogger := p.ResourceLogger
 	imageFactoryClient := p.ImageFactoryClient

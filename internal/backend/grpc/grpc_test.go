@@ -103,7 +103,7 @@ func (suite *GrpcSuite) SetupTest() {
 	suite.runtime, err = omniruntime.NewRuntime(omniruntime.RuntimeParams{
 		Cfg:                     config.Default(),
 		TalosClientFactory:      clientFactory,
-		DnsService:              dnsService,
+		DNSService:              dnsService,
 		WorkloadProxyReconciler: workloadProxyReconciler,
 		ImageFactoryClient:      imageFactoryClient,
 		State:                   st,

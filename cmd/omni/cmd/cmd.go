@@ -41,6 +41,7 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
+//nolint:gocognit
 func buildRootCommand() (*cobra.Command, error) {
 	configSchema, schemaErr := config.ParseSchema()
 	if schemaErr != nil {
