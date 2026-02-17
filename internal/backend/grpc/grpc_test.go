@@ -100,11 +100,18 @@ func (suite *GrpcSuite) SetupTest() {
 
 	kubernetesRuntime := kubernetes.New(st.Default(), logger, "", "", "")
 
-	suite.runtime, err = omniruntime.NewRuntime(
-		config.Default(), clientFactory, dnsService, workloadProxyReconciler, nil,
-		imageFactoryClient, nil, nil, nil, st,
-		prometheus.NewRegistry(), discoveryClientCache, kubernetesRuntime, nil, logger.WithOptions(zap.IncreaseLevel(zap.InfoLevel)),
-	)
+	suite.runtime, err = omniruntime.NewRuntime(omniruntime.RuntimeParams{
+		Cfg:                     config.Default(),
+		TalosClientFactory:      clientFactory,
+		DnsService:              dnsService,
+		WorkloadProxyReconciler: workloadProxyReconciler,
+		ImageFactoryClient:      imageFactoryClient,
+		State:                   st,
+		MetricsRegistry:         prometheus.NewRegistry(),
+		DiscoveryClientCache:    discoveryClientCache,
+		KubernetesRuntime:       kubernetesRuntime,
+		Logger:                  logger.WithOptions(zap.IncreaseLevel(zap.InfoLevel)),
+	})
 	suite.Require().NoError(err)
 
 	suite.startRuntime()

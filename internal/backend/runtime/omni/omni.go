@@ -90,14 +90,45 @@ type Runtime struct {
 	powerStageWatcher *powerstage.Watcher
 }
 
+// RuntimeParams groups the parameters needed to create a new Omni runtime.
+type RuntimeParams struct {
+	Cfg                  *config.Params
+	TalosClientFactory   *talos.ClientFactory
+	DnsService           *dns.Service
+	WorkloadProxyReconciler *workloadproxy.Reconciler
+	ResourceLogger       *resourcelogger.Logger
+	ImageFactoryClient   *imagefactory.Client
+	LinkCounterDeltaCh   <-chan siderolink.LinkCounterDeltas
+	SiderolinkEventsCh   <-chan *omni.MachineStatusSnapshot
+	InstallEventCh       <-chan cosiresource.ID
+	State                *State
+	MetricsRegistry      prometheus.Registerer
+	DiscoveryClientCache omnictrl.DiscoveryClientCache
+	KubernetesRuntime    omnictrl.KubernetesRuntime
+	TalosRuntime         omnictrl.TalosClientGetter
+	Logger               *zap.Logger
+}
+
 // NewRuntime creates a new Omni runtime.
 //
 //nolint:maintidx
-func NewRuntime(cfg *config.Params, talosClientFactory *talos.ClientFactory, dnsService *dns.Service, workloadProxyReconciler *workloadproxy.Reconciler,
-	resourceLogger *resourcelogger.Logger, imageFactoryClient *imagefactory.Client, linkCounterDeltaCh <-chan siderolink.LinkCounterDeltas,
-	siderolinkEventsCh <-chan *omni.MachineStatusSnapshot, installEventCh <-chan cosiresource.ID, st *State, metricsRegistry prometheus.Registerer,
-	discoveryClientCache omnictrl.DiscoveryClientCache, kubernetesRuntime omnictrl.KubernetesRuntime, talosRuntime omnictrl.TalosClientGetter, logger *zap.Logger,
-) (*Runtime, error) {
+func NewRuntime(p RuntimeParams) (*Runtime, error) {
+	cfg := p.Cfg
+	talosClientFactory := p.TalosClientFactory
+	dnsService := p.DnsService
+	workloadProxyReconciler := p.WorkloadProxyReconciler
+	resourceLogger := p.ResourceLogger
+	imageFactoryClient := p.ImageFactoryClient
+	linkCounterDeltaCh := p.LinkCounterDeltaCh
+	siderolinkEventsCh := p.SiderolinkEventsCh
+	installEventCh := p.InstallEventCh
+	st := p.State
+	metricsRegistry := p.MetricsRegistry
+	discoveryClientCache := p.DiscoveryClientCache
+	kubernetesRuntime := p.KubernetesRuntime
+	talosRuntime := p.TalosRuntime
+	logger := p.Logger
+
 	var opts []options.Option
 
 	if !cfg.Features.GetDisableControllerRuntimeCache() {

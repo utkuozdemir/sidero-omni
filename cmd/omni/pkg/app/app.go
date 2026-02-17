@@ -91,10 +91,23 @@ func Run(ctx context.Context, state *omni.State, cfg *config.Params, logger *zap
 
 	prometheus.MustRegister(discoveryClientCache)
 
-	omniRuntime, err := omni.NewRuntime(cfg, talosClientFactory, dnsService, workloadProxyReconciler, resourceLogger,
-		imageFactoryClient, linkCounterDeltaCh, siderolinkEventsCh, installEventCh, state,
-		prometheus.DefaultRegisterer, discoveryClientCache, kubernetesRuntime, talosRuntime, logger.With(logging.Component("omni_runtime")),
-	)
+	omniRuntime, err := omni.NewRuntime(omni.RuntimeParams{
+		Cfg:                     cfg,
+		TalosClientFactory:      talosClientFactory,
+		DnsService:              dnsService,
+		WorkloadProxyReconciler: workloadProxyReconciler,
+		ResourceLogger:          resourceLogger,
+		ImageFactoryClient:      imageFactoryClient,
+		LinkCounterDeltaCh:      linkCounterDeltaCh,
+		SiderolinkEventsCh:      siderolinkEventsCh,
+		InstallEventCh:          installEventCh,
+		State:                   state,
+		MetricsRegistry:         prometheus.DefaultRegisterer,
+		DiscoveryClientCache:    discoveryClientCache,
+		KubernetesRuntime:       kubernetesRuntime,
+		TalosRuntime:            talosRuntime,
+		Logger:                  logger.With(logging.Component("omni_runtime")),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to set up the controller runtime: %w", err)
 	}
