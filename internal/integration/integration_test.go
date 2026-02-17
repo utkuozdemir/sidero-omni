@@ -45,6 +45,7 @@ import (
 	_ "github.com/siderolabs/omni/cmd/acompat" // this package should always be imported first for init->set env to work
 	"github.com/siderolabs/omni/cmd/omni/pkg/app"
 	"github.com/siderolabs/omni/internal/backend/runtime/omni"
+	omnisqlite "github.com/siderolabs/omni/internal/backend/runtime/omni/sqlite"
 	"github.com/siderolabs/omni/internal/pkg/auth"
 	"github.com/siderolabs/omni/internal/pkg/auth/actor"
 	"github.com/siderolabs/omni/internal/pkg/auth/role"
@@ -483,7 +484,12 @@ func runOmni(t *testing.T) (string, error) {
 
 	omniCtx := actor.MarkContextAsInternalActor(t.Context())
 
-	state, err := omni.NewState(omniCtx, config, logger, prometheus.DefaultRegisterer)
+	stateParams, err := buildIntegrationStateParams(omniCtx, config, logger)
+	if err != nil {
+		return "", err
+	}
+
+	state, err := omni.NewState(omniCtx, stateParams, logger, prometheus.DefaultRegisterer, config.Account.GetName())
 	if err != nil {
 		return "", err
 	}
@@ -546,4 +552,45 @@ func createBootstrapServiceAccount(ctx context.Context, name string, st cosistat
 	}
 
 	return serviceaccount.Encode(name, key)
+}
+
+func buildIntegrationStateParams(ctx context.Context, params *config.Params, logger *zap.Logger) (omni.StateParams, error) {
+	secondaryStorageDB, err := omni.OpenSecondaryStorageDB(params.Storage.Sqlite)
+	if err != nil {
+		return omni.StateParams{}, fmt.Errorf("failed to open sqlite database for secondary storage: %w", err)
+	}
+
+	defaultPersistentState, err := omni.NewDefaultPersistentState(ctx, params, logger)
+	if err != nil {
+		return omni.StateParams{}, err
+	}
+
+	secondaryPersistentState, err := omni.NewSecondaryPersistentState(ctx, secondaryStorageDB, logger)
+	if err != nil {
+		return omni.StateParams{}, fmt.Errorf("failed to create SQLite state for secondary storage: %w", err)
+	}
+
+	virtualState := omni.NewVirtualState(defaultPersistentState, params.Services.Api.URL())
+
+	storeFactory, err := omni.NewStoreFactory(params.EtcdBackup)
+	if err != nil {
+		return omni.StateParams{}, fmt.Errorf("failed to create etcd backup store factory: %w", err)
+	}
+
+	sqliteMetrics := omni.NewSQLiteMetrics(secondaryStorageDB, secondaryPersistentState, logger)
+
+	auditWrap, err := omni.NewAuditWrap(ctx, params.Logs.Audit, secondaryStorageDB, logger, sqliteMetrics.CleanupCallback(omnisqlite.SubsystemAuditLogs))
+	if err != nil {
+		return omni.StateParams{}, err
+	}
+
+	return omni.StateParams{
+		DefaultPersistentState:   defaultPersistentState,
+		SecondaryPersistentState: secondaryPersistentState,
+		SecondaryStorageDB:       secondaryStorageDB,
+		VirtualState:             virtualState,
+		StoreFactory:             storeFactory,
+		AuditWrap:                auditWrap,
+		SQLiteMetrics:            sqliteMetrics,
+	}, nil
 }

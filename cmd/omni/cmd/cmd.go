@@ -24,6 +24,7 @@ import (
 	"github.com/siderolabs/omni/client/pkg/panichandler"
 	"github.com/siderolabs/omni/cmd/omni/pkg/app"
 	"github.com/siderolabs/omni/internal/backend/runtime/omni"
+	omnisqlite "github.com/siderolabs/omni/internal/backend/runtime/omni/sqlite"
 	"github.com/siderolabs/omni/internal/pkg/auth/actor"
 	"github.com/siderolabs/omni/internal/pkg/config"
 	"github.com/siderolabs/omni/internal/pkg/jsonschema"
@@ -123,7 +124,18 @@ func buildRootCommand() (*cobra.Command, error) {
 
 			ctx = actor.MarkContextAsInternalActor(ctx)
 
-			state, err := omni.NewState(ctx, config, logger, prometheus.DefaultRegisterer)
+			stateParams, cleanup, err := buildStateParams(ctx, config, logger)
+			if err != nil {
+				return err
+			}
+
+			defer func() {
+				if cleanupErr := cleanup(); cleanupErr != nil {
+					logger.Error("failed to close resources gracefully", zap.Error(cleanupErr))
+				}
+			}()
+
+			state, err := omni.NewState(ctx, stateParams, logger, prometheus.DefaultRegisterer, config.Account.GetName())
 			if err != nil {
 				return err
 			}
@@ -420,6 +432,53 @@ func defineEtcdBackupsFlags(rootCmd *cobra.Command, rootCmdFlagBinder *FlagBinde
 	rootCmdFlagBinder.Uint64Var("etcd-backup-download-limit-mbps", flagDescription("etcdBackup.downloadLimitMbps", schema), &flagConfig.EtcdBackup.DownloadLimitMbps)
 
 	rootCmd.MarkFlagsMutuallyExclusive("etcd-backup-s3", "etcd-backup-local-path")
+}
+
+func buildStateParams(ctx context.Context, params *config.Params, logger *zap.Logger) (omni.StateParams, func() error, error) {
+	logger.Info("using sqlite", zap.String("path", params.Storage.Sqlite.GetPath()))
+
+	secondaryStorageDB, err := omni.OpenSecondaryStorageDB(params.Storage.Sqlite)
+	if err != nil {
+		return omni.StateParams{}, nil, fmt.Errorf("failed to open sqlite database for secondary storage: %w", err)
+	}
+
+	defaultPersistentState, err := omni.NewDefaultPersistentState(ctx, params, logger)
+	if err != nil {
+		return omni.StateParams{}, nil, err
+	}
+
+	secondaryPersistentState, err := omni.NewSecondaryPersistentState(ctx, secondaryStorageDB, logger)
+	if err != nil {
+		return omni.StateParams{}, nil, fmt.Errorf("failed to create SQLite state for secondary storage: %w", err)
+	}
+
+	virtualState := omni.NewVirtualState(defaultPersistentState, params.Services.Api.URL())
+
+	storeFactory, err := omni.NewStoreFactory(params.EtcdBackup)
+	if err != nil {
+		return omni.StateParams{}, nil, fmt.Errorf("failed to create etcd backup store factory: %w", err)
+	}
+
+	sqliteMetrics := omni.NewSQLiteMetrics(secondaryStorageDB, secondaryPersistentState, logger)
+
+	auditWrap, err := omni.NewAuditWrap(ctx, params.Logs.Audit, secondaryStorageDB, logger, sqliteMetrics.CleanupCallback(omnisqlite.SubsystemAuditLogs))
+	if err != nil {
+		return omni.StateParams{}, nil, err
+	}
+
+	cleanup := func() error {
+		return nil
+	}
+
+	return omni.StateParams{
+		DefaultPersistentState:   defaultPersistentState,
+		SecondaryPersistentState: secondaryPersistentState,
+		SecondaryStorageDB:       secondaryStorageDB,
+		VirtualState:             virtualState,
+		StoreFactory:             storeFactory,
+		AuditWrap:                auditWrap,
+		SQLiteMetrics:            sqliteMetrics,
+	}, cleanup, nil
 }
 
 func flagDescription(fieldPath string, schema *jsonschema.Schema) string {

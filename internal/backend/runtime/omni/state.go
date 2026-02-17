@@ -139,77 +139,90 @@ func (s *State) HandleErrors(ctx context.Context) error {
 	return nil
 }
 
-// NewState creates a production Omni state.
-func NewState(ctx context.Context, params *config.Params, logger *zap.Logger, metricsRegistry prometheus.Registerer) (*State, error) {
-	logger.Info("using sqlite", zap.String("path", params.Storage.Sqlite.GetPath()))
+// StateParams contains pre-created sub-components for building a State.
+type StateParams struct {
+	DefaultPersistentState   *PersistentState
+	SecondaryPersistentState *PersistentState
+	SecondaryStorageDB       *sqlitex.Pool
+	VirtualState             *virtual.State
+	StoreFactory             store.FactoryWithMetrics
+	AuditWrap                *AuditWrap
+	SQLiteMetrics            *sqlite.Metrics
+}
 
-	secondaryStorageDB, err := sqlite.OpenDB(params.Storage.Sqlite)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open sqlite database for secondary storage: %w", err)
-	}
-
-	var defaultPersistentState *PersistentState
-
+// NewDefaultPersistentState creates a persistent state based on the configured storage kind.
+func NewDefaultPersistentState(ctx context.Context, params *config.Params, logger *zap.Logger) (*PersistentState, error) {
 	switch params.Storage.Default.GetKind() {
 	case config.StorageDefaultKindBoltdb:
-		defaultPersistentState, err = newBoltPersistentState(params.Storage.Default.Boltdb.GetPath(), nil, false, logger)
+		return newBoltPersistentState(params.Storage.Default.Boltdb.GetPath(), nil, false, logger)
 	case config.StorageDefaultKindEtcd:
-		defaultPersistentState, err = newEtcdPersistentState(ctx, params, logger)
+		return newEtcdPersistentState(ctx, params, logger)
 	default:
 		return nil, fmt.Errorf("unknown storage kind %q", params.Storage.Default.GetKind())
 	}
+}
 
-	if err != nil {
-		return nil, err
-	}
+// NewSecondaryPersistentState creates a SQLite-backed persistent state for secondary storage.
+func NewSecondaryPersistentState(ctx context.Context, db *sqlitex.Pool, logger *zap.Logger) (*PersistentState, error) {
+	return newSQLitePersistentState(ctx, db, logger)
+}
 
-	virtualState := virtual.NewState(state.WrapCore(defaultPersistentState.State), params.Services.Api.URL())
+// OpenSecondaryStorageDB opens the SQLite database used for secondary storage.
+func OpenSecondaryStorageDB(sqliteCfg config.SQLite) (*sqlitex.Pool, error) {
+	return sqlite.OpenDB(sqliteCfg)
+}
 
-	secondaryPersistentState, err := newSQLitePersistentState(ctx, secondaryStorageDB, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create SQLite state for secondary storage: %w", err)
-	}
+// NewVirtualState creates a new virtual state from the default persistent state.
+func NewVirtualState(defaultPersistentState *PersistentState, apiURL string) *virtual.State {
+	return virtual.NewState(state.WrapCore(defaultPersistentState.State), apiURL)
+}
 
-	storeFactory, err := store.NewStoreFactory(params.EtcdBackup)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create etcd backup store factory: %w", err)
-	}
+// NewStoreFactory creates a new etcd backup store factory.
+func NewStoreFactory(etcdBackupCfg config.EtcdBackup) (store.FactoryWithMetrics, error) {
+	return store.NewStoreFactory(etcdBackupCfg)
+}
 
+// NewSQLiteMetrics creates a new SQLite metrics collector.
+func NewSQLiteMetrics(db *sqlitex.Pool, secondaryState *PersistentState, logger *zap.Logger) *sqlite.Metrics {
+	return sqlite.NewMetrics(db, secondaryState.State, logger)
+}
+
+// NewState assembles a production Omni state from pre-created sub-components.
+func NewState(ctx context.Context, p StateParams, logger *zap.Logger, metricsRegistry prometheus.Registerer, accountName string) (*State, error) {
 	namespacedState := newNamespacedState(
-		defaultPersistentState.State,
-		secondaryPersistentState.State,
-		virtualState,
+		p.DefaultPersistentState.State,
+		p.SecondaryPersistentState.State,
+		p.VirtualState,
 		logger,
-		storeFactory,
+		p.StoreFactory,
 	)
 
 	measuredState := stateWithMetrics(namespacedState, metricsRegistry)
 	defaultState := state.WrapCore(measuredState)
 
-	if err = initResources(ctx, defaultState, logger, params.Account.GetName()); err != nil {
+	if err := initResources(ctx, defaultState, logger, accountName); err != nil {
 		return nil, err
 	}
 
-	sqliteMetrics := sqlite.NewMetrics(secondaryStorageDB, secondaryPersistentState.State, logger)
-	metricsRegistry.MustRegister(sqliteMetrics)
-
-	auditWrap, err := NewAuditWrap(ctx, defaultState, params, secondaryStorageDB, logger, sqliteMetrics.CleanupCallback(sqlite.SubsystemAuditLogs))
-	if err != nil {
-		return nil, err
+	if p.SQLiteMetrics != nil {
+		metricsRegistry.MustRegister(p.SQLiteMetrics)
 	}
 
-	defaultState = auditWrap.WrapState(defaultState)
+	if p.AuditWrap != nil {
+		defaultState = p.AuditWrap.WrapState(defaultState)
+	}
 
 	return &State{
 		defaultState:  defaultState,
-		virtualState:  virtualState,
-		auditWrap:     auditWrap,
-		storeFactory:  storeFactory,
-		sqliteMetrics: sqliteMetrics,
+		virtualState:  p.VirtualState,
+		auditWrap:     p.AuditWrap,
+		storeFactory:  p.StoreFactory,
+		sqliteMetrics: p.SQLiteMetrics,
+		logger:        logger,
 
-		defaultPersistentState:   defaultPersistentState,
-		secondaryPersistentState: secondaryPersistentState,
-		secondaryStorageDB:       secondaryStorageDB,
+		defaultPersistentState:   p.DefaultPersistentState,
+		secondaryPersistentState: p.SecondaryPersistentState,
+		secondaryStorageDB:       p.SecondaryStorageDB,
 	}, nil
 }
 
@@ -315,11 +328,11 @@ func stateWithMetrics(namespacedState *namespaced.State, metricsRegistry prometh
 }
 
 // NewAuditWrap creates a new audit wrap.
-func NewAuditWrap(ctx context.Context, resState state.State, params *config.Params, auditLogDB *sqlitex.Pool, logger *zap.Logger, onCleanup func(int)) (*AuditWrap, error) {
-	if !params.Logs.Audit.GetEnabled() {
+func NewAuditWrap(ctx context.Context, auditCfg config.LogsAudit, auditLogDB *sqlitex.Pool, logger *zap.Logger, onCleanup func(int)) (*AuditWrap, error) {
+	if !auditCfg.GetEnabled() {
 		logger.Info("audit log disabled")
 
-		return &AuditWrap{state: resState}, nil
+		return &AuditWrap{}, nil
 	}
 
 	logger.Info("audit log enabled")
@@ -329,14 +342,14 @@ func NewAuditWrap(ctx context.Context, resState state.State, params *config.Para
 		logOpts = append(logOpts, audit.WithCleanupCallback(onCleanup))
 	}
 
-	a, err := audit.NewLog(ctx, params.Logs.Audit, auditLogDB, logger, logOpts...)
+	a, err := audit.NewLog(ctx, auditCfg, auditLogDB, logger, logOpts...)
 	if err != nil {
 		return nil, err
 	}
 
 	hooks.Init(a)
 
-	return &AuditWrap{state: resState, log: a}, nil
+	return &AuditWrap{log: a}, nil
 }
 
 // AuditWrap is builder/wrapper for creating logged access to Omni and Talos nodes.
