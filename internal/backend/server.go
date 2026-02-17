@@ -180,46 +180,53 @@ func NewServer(
 	return s, nil
 }
 
-// Run runs everything.
-func (s *Server) Run(ctx context.Context) error {
+// serverComponents holds all components constructed during server initialization,
+// ready to be started in the lifecycle phase.
+type serverComponents struct {
+	oidcStorage   oidc.Storage
+	grpcServer    *grpcServer
+	grpcDialsTo   *memconn.Transport
+	proxyServer   *grpcServer
+	proxyDialsTo  *memconn.Transport
+	router        *router.Router
+	apiServer     *apiServer
+	serverOptions []grpc.ServerOption
+}
+
+// initServer constructs all server components. This must be called before the errgroup starts.
+func (s *Server) initServer(ctx context.Context) (*serverComponents, error) {
 	if err := s.initMachineAPI(ctx); err != nil {
-		return fmt.Errorf("failed to initialize machine API: %w", err)
+		return nil, fmt.Errorf("failed to initialize machine API: %w", err)
 	}
-
-	eg, ctx := errgroup.WithContext(ctx)
-
-	eg.Go(func() error { return s.omniRuntime.Run(ctx) })
 
 	runtimeState := s.state.Default()
 	oidcStorage := oidc.NewStorage(runtimeState, s.logger)
 
-	eg.Go(func() error { return oidcStorage.Run(ctx) })
-
 	oidcIssuerEndpoint, err := s.cfg.GetOIDCIssuerEndpoint()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	oidcProvider, err := oidc.NewProvider(oidcStorage, oidcIssuerEndpoint)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if s.cfg.Auth.Oidc.GetEnabled() {
 		s.oidcProvider, err = coidc.NewProvider(ctx, s.cfg.Auth.Oidc.GetProviderURL())
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	mux, err := s.makeMux(oidcProvider) //nolint:contextcheck
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	serverOptions, err := s.buildServerOptions(ctx) //nolint:contextcheck
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	runtimes := map[string]backendruntime.Runtime{
@@ -248,22 +255,53 @@ func (s *Server) Run(ctx context.Context) error {
 		runtimes,
 	)
 
-	actualSrv, gtwyDialsTo, err := s.serverAndGateway(ctx, servicesServer, mux, serverOptions...)
+	grpcSrv, grpcDialsTo, err := s.serverAndGateway(ctx, servicesServer, mux, serverOptions...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	proxyServer, prxDialsTo, err := s.makeProxyServer(ctx, eg)
+	proxyServer, proxyDialsTo, rtr, err := s.makeProxyServer()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	workloadProxyHandler, err := s.workloadProxyHandler(mux)
 	if err != nil {
-		return fmt.Errorf("failed to create workload proxy handler: %w", err)
+		return nil, fmt.Errorf("failed to create workload proxy handler: %w", err)
 	}
 
 	apiSrv := s.makeAPIServer(workloadProxyHandler, proxyServer)
+
+	if s.cfg.Auth.InitialServiceAccount.GetEnabled() {
+		if err = s.createInitialServiceAccount(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	return &serverComponents{
+		oidcStorage:   oidcStorage,
+		grpcServer:    grpcSrv,
+		grpcDialsTo:   grpcDialsTo,
+		proxyServer:   proxyServer,
+		proxyDialsTo:  proxyDialsTo,
+		router:        rtr,
+		apiServer:     apiSrv,
+		serverOptions: serverOptions,
+	}, nil
+}
+
+// Run runs everything.
+func (s *Server) Run(ctx context.Context) error {
+	components, err := s.initServer(ctx)
+	if err != nil {
+		return err
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error { return s.omniRuntime.Run(ctx) })
+	eg.Go(func() error { return components.oidcStorage.Run(ctx) })
+	eg.Go(func() error { return components.router.ResourceWatcher(ctx, s.state.Default(), s.logger) })
 
 	type subsystem struct {
 		run  func() error
@@ -284,12 +322,12 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	subsystems := []subsystem{
-		newSubsystem("gateway proxy server", func() error { return proxyServer.Serve(ctx, gtwyDialsTo) }),
-		newSubsystem("HTTP server", func() error { return actualSrv.Serve(ctx, prxDialsTo) }),
-		newSubsystem("internal gRPC server", func() error { return apiSrv.Run(ctx) }),
+		newSubsystem("gateway proxy server", func() error { return components.proxyServer.Serve(ctx, components.grpcDialsTo) }),
+		newSubsystem("HTTP server", func() error { return components.grpcServer.Serve(ctx, components.proxyDialsTo) }),
+		newSubsystem("internal gRPC server", func() error { return components.apiServer.Run(ctx) }),
 		newSubsystem("metrics server", func() error { return s.runMetricsServer(ctx) }),
-		newSubsystem("k8s proxy server", func() error { return s.runK8sProxyServer(ctx, oidcStorage) }),
-		newSubsystem("frontend dev proxy server", func() error { return s.runDevProxyServer(ctx, apiSrv.Handler()) }),
+		newSubsystem("k8s proxy server", func() error { return s.runK8sProxyServer(ctx, components.oidcStorage) }),
+		newSubsystem("frontend dev proxy server", func() error { return s.runDevProxyServer(ctx, components.apiServer.Handler()) }),
 		newSubsystem("log handler", func() error { return s.logHandler.Start(ctx) }),
 		newSubsystem("machine API", func() error { return s.runMachineAPI(ctx) }),
 		newSubsystem("audit cleanup", func() error { return s.state.RunAuditCleanup(ctx) }),
@@ -312,7 +350,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	if s.cfg.Services.LocalResourceService.GetEnabled() {
-		if err = runLocalResourceServer(ctx, runtimeState, serverOptions, eg, s.logger, s.cfg.Services.LocalResourceService.GetPort()); err != nil {
+		if err = runLocalResourceServer(ctx, s.state.Default(), components.serverOptions, eg, s.logger, s.cfg.Services.LocalResourceService.GetPort()); err != nil {
 			return fmt.Errorf("failed to run local resource server: %w", err)
 		}
 	}
@@ -325,12 +363,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 			return nil
 		})
-	}
-
-	if s.cfg.Auth.InitialServiceAccount.GetEnabled() {
-		if err = s.createInitialServiceAccount(ctx); err != nil {
-			return err
-		}
 	}
 
 	return eg.Wait()
@@ -397,7 +429,7 @@ func (s *Server) serverAndGateway(
 	}, gtwyDialsTo, nil
 }
 
-func (s *Server) makeProxyServer(ctx context.Context, eg *errgroup.Group) (*grpcServer, *memconn.Transport, error) {
+func (s *Server) makeProxyServer() (*grpcServer, *memconn.Transport, *router.Router, error) {
 	transport := memconn.NewTransport("grpc-conn")
 
 	rtr, err := router.NewRouter(
@@ -409,12 +441,10 @@ func (s *Server) makeProxyServer(ctx context.Context, eg *errgroup.Group) (*grpc
 		interceptor.NewSignature(s.authenticatorFunc(), s.logger).Unary(),
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	prometheus.MustRegister(rtr)
-
-	eg.Go(func() error { return rtr.ResourceWatcher(ctx, s.state.Default(), s.logger) })
 
 	srv := router.NewServer(rtr,
 		router.Interceptors(s.logger),
@@ -429,7 +459,7 @@ func (s *Server) makeProxyServer(ctx context.Context, eg *errgroup.Group) (*grpc
 	return &grpcServer{
 		server: srv,
 		logger: s.logger,
-	}, transport, nil
+	}, transport, rtr, nil
 }
 
 // buildServerOptions builds the gRPC server options.
