@@ -9,8 +9,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/cosi-project/runtime/pkg/resource"
+	"github.com/cosi-project/runtime/pkg/safe"
+	state2 "github.com/cosi-project/runtime/pkg/state"
 	"github.com/go-logr/zapr"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
@@ -76,6 +79,8 @@ func Run(ctx context.Context, state *omni.State, config *config.Params, logger *
 	klog.SetLogger(zapr.NewLogger(logger.WithOptions(zap.IncreaseLevel(zapcore.WarnLevel)).With(logging.Component("kubernetes"))))
 
 	ctx = actor.MarkContextAsInternalActor(ctx)
+
+	fixClusterSecretsOwnerships(ctx, state)
 
 	dnsService := dns.NewService(state.Default(), logger)
 	workloadProxyReconciler := workloadproxy.NewReconciler(logger.With(logging.Component("workload_proxy_reconciler")),
@@ -166,4 +171,44 @@ func Run(ctx context.Context, state *omni.State, config *config.Params, logger *
 	}
 
 	return nil
+}
+
+func fixClusterSecretsOwnerships(ctx context.Context, state *omni.State) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("#### PANIC RECOVERED IN SECRETS HOTFIX: %v", r)
+		}
+	}()
+
+	log.Printf("#### START SECRETS HOTFIX")
+
+	secretsList, err := safe.StateListAll[*omnires.ClusterSecrets](ctx, state.Default())
+	if err != nil {
+		log.Printf("#### FAILED TO LIST SECRETS: %v", err)
+
+		return
+	}
+
+	for secrets := range secretsList.All() {
+		owner := secrets.Metadata().Owner()
+
+		log.Printf("#### PROCESS SECRETS %s, OWNER %q, PHASE %q", secrets.Metadata().ID(), owner, secrets.Metadata().Phase().String())
+
+		const correctOwner = "SecretsController"
+
+		if owner != correctOwner {
+			log.Printf("#### FIX OWNER FOR SECRETS %s", secrets.Metadata().ID())
+
+			_, updateErr := safe.StateUpdateWithConflicts(ctx, state.Default(), secrets.Metadata(), func(res *omnires.ClusterSecrets) error {
+				return res.Metadata().SetOwner(correctOwner)
+			}, state2.WithUpdateOwner(owner), state2.WithExpectedPhaseAny())
+			if updateErr != nil {
+				log.Printf("#### FAILED TO UPDATE SECRETS %s: %v", secrets.Metadata().ID(), updateErr)
+			} else {
+				log.Printf("#### SUCCESSFULLY UPDATED SECRETS %s", secrets.Metadata().ID())
+			}
+		}
+	}
+
+	log.Printf("#### END START SECRETS HOTFIX")
 }
