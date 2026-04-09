@@ -539,14 +539,14 @@
           "type": "string",
           "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
           "x-pattern-message": "must be a valid Go duration (e.g., '10s', '1h30m')",
-          "default": "15s",
+          "default": "30s",
           "goJSONSchema": {
             "type": "time.Duration",
             "pointer": true
           }
         },
         "keepAlivePeriod": {
-          "description": "KeepAlivePeriod is the period used by the load balancer service for keep-alive pings to backend control plane nodes.",
+          "description": "KeepAlivePeriod is the period AAAA used by the load balancer service for keep-alive pings to backend control plane nodes.",
           "type": "string",
           "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
           "x-pattern-message": "must be a valid Go duration (e.g., '10s', '1h30m')",
