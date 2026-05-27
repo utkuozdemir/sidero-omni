@@ -2000,7 +2000,8 @@ func TestKernelArgsValidation(t *testing.T) {
 				ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 				t.Cleanup(cancel)
 
-				st := validated.NewState(state.WrapCore(namespaced.NewState(inmem.Build)), validations.InstallationMediaConfigValidationOptions()...)
+				innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+				st := validated.NewState(innerSt, validations.InstallationMediaConfigValidationOptions(innerSt)...)
 
 				media := omnires.NewInstallationMediaConfig("test")
 				media.TypedSpec().Value.Architecture = specs.PlatformConfigSpec_AMD64
@@ -2017,6 +2018,146 @@ func TestKernelArgsValidation(t *testing.T) {
 				assert.ErrorContains(t, err, tt.errContains)
 			})
 		}
+	})
+}
+
+func TestExtensionsCatalogValidation(t *testing.T) {
+	t.Parallel()
+
+	const talosVersionID = "1.7.5"
+
+	setupBaseState := func(t *testing.T) state.State {
+		innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+
+		talosVersion := omnires.NewTalosVersion(talosVersionID)
+		talosVersion.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.30.0"}
+		require.NoError(t, innerSt.Create(ctx, talosVersion))
+
+		catalog := omnires.NewTalosExtensions(talosVersionID)
+		catalog.TypedSpec().Value.Items = []*specs.TalosExtensionsSpec_Info{
+			{Name: "siderolabs/qemu-guest-agent"},
+			{Name: "siderolabs/i915-ucode"},
+		}
+		require.NoError(t, innerSt.Create(ctx, catalog))
+
+		return innerSt
+	}
+
+	t.Run("installation media config", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tt := range []struct {
+			name         string
+			talosVersion string
+			errContains  string
+			extensions   []string
+		}{
+			{name: "empty extensions, no version", talosVersion: ""},
+			{name: "valid extension", talosVersion: talosVersionID, extensions: []string{"siderolabs/qemu-guest-agent"}},
+			{
+				name:         "unknown extension",
+				talosVersion: talosVersionID,
+				extensions:   []string{"siderolabs/typo-extension"},
+				errContains:  "is not available",
+			},
+			{
+				name:        "extensions without version",
+				extensions:  []string{"siderolabs/qemu-guest-agent"},
+				errContains: "require a Talos version",
+			},
+			{
+				name:         "version without catalog",
+				talosVersion: "9.9.9",
+				extensions:   []string{"siderolabs/qemu-guest-agent"},
+				errContains:  "no Talos extensions catalog",
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+				t.Cleanup(cancel)
+
+				innerSt := setupBaseState(t)
+				st := validated.NewState(innerSt, validations.InstallationMediaConfigValidationOptions(innerSt)...)
+
+				media := omnires.NewInstallationMediaConfig("test")
+				media.TypedSpec().Value.Architecture = specs.PlatformConfigSpec_AMD64
+				media.TypedSpec().Value.TalosVersion = tt.talosVersion
+				media.TypedSpec().Value.InstallExtensions = tt.extensions
+
+				err := st.Create(ctx, media)
+				if tt.errContains == "" {
+					require.NoError(t, err)
+
+					return
+				}
+
+				assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+				assert.ErrorContains(t, err, tt.errContains)
+			})
+		}
+	})
+
+	t.Run("machine request set", func(t *testing.T) {
+		t.Parallel()
+
+		setupRequestState := func(t *testing.T) state.State {
+			innerSt := setupBaseState(t)
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			providerStatus := infra.NewProviderStatus("talemu")
+			providerStatus.TypedSpec().Value.Schema = string(schema)
+			require.NoError(t, innerSt.Create(ctx, providerStatus))
+
+			return innerSt
+		}
+
+		newRequestSet := func() *omnires.MachineRequestSet {
+			res := omnires.NewMachineRequestSet("test")
+			res.TypedSpec().Value.ProviderId = "talemu"
+			res.TypedSpec().Value.TalosVersion = talosVersionID
+			res.TypedSpec().Value.ProviderData = "size: t2.small\n"
+
+			return res
+		}
+
+		t.Run("valid extension", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := setupRequestState(t)
+			st := validated.NewState(innerSt, validations.MachineRequestSetValidationOptions(innerSt)...)
+
+			res := newRequestSet()
+			res.TypedSpec().Value.Extensions = []string{"siderolabs/i915-ucode"}
+
+			require.NoError(t, st.Create(ctx, res))
+		})
+
+		t.Run("unknown extension", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := setupRequestState(t)
+			st := validated.NewState(innerSt, validations.MachineRequestSetValidationOptions(innerSt)...)
+
+			res := newRequestSet()
+			res.TypedSpec().Value.Extensions = []string{"siderolabs/typo-extension"}
+
+			err := st.Create(ctx, res)
+			assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+			assert.ErrorContains(t, err, "is not available")
+		})
 	})
 }
 
@@ -2283,7 +2424,8 @@ func TestInstallationMediaConfigValidation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	t.Cleanup(cancel)
 
-	st := validated.NewState(state.WrapCore(namespaced.NewState(inmem.Build)), validations.InstallationMediaConfigValidationOptions()...)
+	innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+	st := validated.NewState(innerSt, validations.InstallationMediaConfigValidationOptions(innerSt)...)
 
 	installationMediaConfig := omnires.NewInstallationMediaConfig("test")
 

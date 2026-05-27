@@ -20,8 +20,8 @@ import (
 	"github.com/siderolabs/omni/internal/backend/runtime/omni/virtual/pkg/factory/configs"
 )
 
-func installationMediaConfigValidationOptions() []validated.StateOption {
-	validateInstallationMedia := func(res *omni.InstallationMediaConfig) error {
+func installationMediaConfigValidationOptions(st state.State) []validated.StateOption {
+	validateInstallationMedia := func(ctx context.Context, res *omni.InstallationMediaConfig) error {
 		if res.Metadata().Phase() == resource.PhaseTearingDown {
 			return nil
 		}
@@ -60,16 +60,16 @@ func installationMediaConfigValidationOptions() []validated.StateOption {
 			return err
 		}
 
-		return nil
+		return validateExtensions(ctx, st, spec.GetTalosVersion(), spec.GetInstallExtensions())
 	}
 
 	return []validated.StateOption{
 		validated.WithCreateValidations(validated.NewCreateValidationForType(func(ctx context.Context, res *omni.InstallationMediaConfig, _ ...state.CreateOption) error {
-			return validateInstallationMedia(res)
+			return validateInstallationMedia(ctx, res)
 		})),
 		validated.WithUpdateValidations(validated.NewUpdateValidationForType(
 			func(ctx context.Context, _, newRes *omni.InstallationMediaConfig, _ ...state.UpdateOption) error {
-				return validateInstallationMedia(newRes)
+				return validateInstallationMedia(ctx, newRes)
 			})),
 	}
 }
