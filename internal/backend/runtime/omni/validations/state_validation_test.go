@@ -2102,6 +2102,110 @@ func TestExtensionsCatalogValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("extensions configuration", func(t *testing.T) {
+		t.Parallel()
+
+		const clusterID = "test-cluster"
+
+		setupClusterState := func(t *testing.T) state.State {
+			innerSt := setupBaseState(t)
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			cluster := omnires.NewCluster(clusterID)
+			cluster.TypedSpec().Value.TalosVersion = talosVersionID
+			cluster.TypedSpec().Value.KubernetesVersion = "1.30.0"
+			require.NoError(t, innerSt.Create(ctx, cluster))
+
+			return innerSt
+		}
+
+		t.Run("empty extensions", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := setupClusterState(t)
+			st := validated.NewState(innerSt, validations.ExtensionsConfigurationValidationOptions(innerSt)...)
+
+			res := omnires.NewExtensionsConfiguration("test")
+			res.Metadata().Labels().Set(omnires.LabelCluster, clusterID)
+
+			require.NoError(t, st.Create(ctx, res))
+		})
+
+		t.Run("valid extension", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := setupClusterState(t)
+			st := validated.NewState(innerSt, validations.ExtensionsConfigurationValidationOptions(innerSt)...)
+
+			res := omnires.NewExtensionsConfiguration("test")
+			res.Metadata().Labels().Set(omnires.LabelCluster, clusterID)
+			res.TypedSpec().Value.Extensions = []string{"siderolabs/qemu-guest-agent"}
+
+			require.NoError(t, st.Create(ctx, res))
+		})
+
+		t.Run("unknown extension", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := setupClusterState(t)
+			st := validated.NewState(innerSt, validations.ExtensionsConfigurationValidationOptions(innerSt)...)
+
+			res := omnires.NewExtensionsConfiguration("test")
+			res.Metadata().Labels().Set(omnires.LabelCluster, clusterID)
+			res.TypedSpec().Value.Extensions = []string{"siderolabs/typo-extension"}
+
+			err := st.Create(ctx, res)
+			assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+			assert.ErrorContains(t, err, "is not available")
+		})
+
+		t.Run("missing cluster label", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := setupClusterState(t)
+			st := validated.NewState(innerSt, validations.ExtensionsConfigurationValidationOptions(innerSt)...)
+
+			res := omnires.NewExtensionsConfiguration("test")
+			res.TypedSpec().Value.Extensions = []string{"siderolabs/qemu-guest-agent"}
+
+			err := st.Create(ctx, res)
+			assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+			assert.ErrorContains(t, err, "must target a cluster via the cluster label")
+		})
+
+		t.Run("cluster does not exist", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := setupClusterState(t)
+			st := validated.NewState(innerSt, validations.ExtensionsConfigurationValidationOptions(innerSt)...)
+
+			res := omnires.NewExtensionsConfiguration("test")
+			res.Metadata().Labels().Set(omnires.LabelCluster, "nonexistent")
+			res.TypedSpec().Value.Extensions = []string{"siderolabs/qemu-guest-agent"}
+
+			err := st.Create(ctx, res)
+			assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+			assert.ErrorContains(t, err, `cluster "nonexistent" does not exist`)
+		})
+	})
+
 	t.Run("machine request set", func(t *testing.T) {
 		t.Parallel()
 
