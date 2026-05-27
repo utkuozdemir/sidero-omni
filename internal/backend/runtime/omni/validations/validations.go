@@ -47,5 +47,6 @@ func Options(st state.State, etcdBackupStoreFactory store.Factory, cfg *config.P
 		rotateSecretsValidationOptions(st),
 		kubernetesManifestsValidationOptions(),
 		eulaValidationOptions(st),
+		kernelArgsValidationOptions(),
 	)
 }

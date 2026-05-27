@@ -8,8 +8,6 @@ package validations
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 
 	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/safe"
@@ -21,18 +19,28 @@ import (
 	"github.com/siderolabs/omni/internal/backend/runtime/omni/validated"
 )
 
-// MaxRequestIDLength caps the length of opaque request ID fields on InfraMachineConfig in bytes.
-// Sized generously above any common opaque-ID format so the bound only ever fires on clearly
-// out-of-scope inputs.
-const MaxRequestIDLength = 128
+const (
+	// MaxRequestIDLength caps the length of opaque request ID fields on InfraMachineConfig in bytes.
+	// Sized generously above any common opaque-ID format so the bound only ever fires on clearly
+	// out-of-scope inputs.
+	MaxRequestIDLength = 128
+
+	// MaxExtraKernelArgsLength caps the length of the InfraMachineConfig extra kernel args field
+	// in bytes. Sized above any reasonable cmdline addition while still bounding the value stored.
+	MaxExtraKernelArgsLength = 4096
+)
 
 func infraMachineConfigValidationOptions(st state.State) []validated.StateOption {
 	validateSpec := func(res *omni.InfraMachineConfig) error {
-		if err := validateRequestID("requested reboot ID", res.TypedSpec().Value.GetRequestedRebootId()); err != nil {
+		if err := validateUserString("requested reboot ID", res.TypedSpec().Value.GetRequestedRebootId(), MaxRequestIDLength); err != nil {
 			return err
 		}
 
-		if err := validateRequestID("power-off request ID", res.TypedSpec().Value.GetPowerOffRequestId()); err != nil {
+		if err := validateUserString("power-off request ID", res.TypedSpec().Value.GetPowerOffRequestId(), MaxRequestIDLength); err != nil {
+			return err
+		}
+
+		if err := validateUserString("extra kernel args", res.TypedSpec().Value.GetExtraKernelArgs(), MaxExtraKernelArgsLength); err != nil {
 			return err
 		}
 
@@ -67,20 +75,4 @@ func infraMachineConfigValidationOptions(st state.State) []validated.StateOption
 			return errors.New("cannot delete the config for an already accepted machine config while it is linked to a machine")
 		})),
 	}
-}
-
-func validateRequestID(fieldName, value string) error {
-	if value == "" {
-		return nil
-	}
-
-	if len(value) > MaxRequestIDLength {
-		return fmt.Errorf("%s is too long: %d bytes (max %d)", fieldName, len(value), MaxRequestIDLength)
-	}
-
-	if strings.ContainsFunc(value, func(r rune) bool { return r < 0x20 || r == 0x7F }) {
-		return fmt.Errorf("%s contains a control character", fieldName)
-	}
-
-	return nil
 }
