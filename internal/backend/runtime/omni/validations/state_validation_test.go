@@ -1784,6 +1784,88 @@ func TestInfraMachineConfigValidation(t *testing.T) {
 	require.NoError(t, st.Destroy(ctx, conf.Metadata()))
 }
 
+func TestInfraMachineConfigRequestIDValidation(t *testing.T) {
+	t.Parallel()
+
+	type setSpec func(s *specs.InfraMachineConfigSpec)
+
+	for _, tt := range []struct {
+		name        string
+		spec        setSpec
+		errContains string
+	}{
+		{
+			name: "empty",
+			spec: func(*specs.InfraMachineConfigSpec) {},
+		},
+		{
+			name: "uuid reboot id",
+			spec: func(s *specs.InfraMachineConfigSpec) { s.RequestedRebootId = "8e1e4e63-7c0c-4a3e-9b6c-7c4a4d7e4f5a" },
+		},
+		{
+			name: "uuid power off id",
+			spec: func(s *specs.InfraMachineConfigSpec) { s.PowerOffRequestId = "8e1e4e63-7c0c-4a3e-9b6c-7c4a4d7e4f5a" },
+		},
+		{
+			name: "reboot id too long",
+			spec: func(s *specs.InfraMachineConfigSpec) {
+				s.RequestedRebootId = strings.Repeat("a", validations.MaxRequestIDLength+1)
+			},
+			errContains: "requested reboot ID is too long",
+		},
+		{
+			name: "power off id too long",
+			spec: func(s *specs.InfraMachineConfigSpec) {
+				s.PowerOffRequestId = strings.Repeat("a", validations.MaxRequestIDLength+1)
+			},
+			errContains: "power-off request ID is too long",
+		},
+		{
+			name:        "reboot id with newline",
+			spec:        func(s *specs.InfraMachineConfigSpec) { s.RequestedRebootId = "abc\ndef" },
+			errContains: "requested reboot ID contains a control character",
+		},
+		{
+			name:        "power off id with NUL",
+			spec:        func(s *specs.InfraMachineConfigSpec) { s.PowerOffRequestId = "abc\x00def" },
+			errContains: "power-off request ID contains a control character",
+		},
+		{
+			name:        "reboot id with escape",
+			spec:        func(s *specs.InfraMachineConfigSpec) { s.RequestedRebootId = "\x1b[31m" },
+			errContains: "requested reboot ID contains a control character",
+		},
+		{
+			name:        "reboot id with DEL",
+			spec:        func(s *specs.InfraMachineConfigSpec) { s.RequestedRebootId = "abc\x7f" },
+			errContains: "requested reboot ID contains a control character",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+			st := validated.NewState(innerSt, validations.InfraMachineConfigValidationOptions(innerSt)...)
+
+			conf := omnires.NewInfraMachineConfig("test")
+			tt.spec(conf.TypedSpec().Value)
+
+			err := st.Create(ctx, conf)
+			if tt.errContains == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+			assert.ErrorContains(t, err, tt.errContains)
+		})
+	}
+}
+
 func TestNodeForceDestroyRequestValidation(t *testing.T) {
 	t.Parallel()
 
