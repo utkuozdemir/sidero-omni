@@ -14,6 +14,7 @@ import (
 	"io"
 	"iter"
 	"math/big"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -2352,6 +2353,18 @@ func TestExtensionsCatalogValidation(t *testing.T) {
 				talosVersion: talosVersionID,
 				extensions:   []string{"qemu-guest-agent"},
 				errContains:  "is not available",
+			},
+			{
+				name:         "duplicate extension rejected",
+				talosVersion: talosVersionID,
+				extensions:   []string{"siderolabs/qemu-guest-agent", "siderolabs/qemu-guest-agent"},
+				errContains:  "is listed more than once",
+			},
+			{
+				name:         "too many extensions rejected",
+				talosVersion: talosVersionID,
+				extensions:   slices.Repeat([]string{"siderolabs/qemu-guest-agent"}, validations.MaxExtensionsCount+1),
+				errContains:  "exceeds maximum",
 			},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
