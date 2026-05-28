@@ -7,25 +7,26 @@ package validations
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/cosi-project/runtime/pkg/state"
 
+	"github.com/siderolabs/omni/client/pkg/constants"
 	"github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 )
 
-// validateExtensions checks each requested extension name against the TalosExtensions catalog for
-// the given Talos version. An empty list is accepted. A non-empty list with an empty Talos version
-// is rejected, since there is no catalog to validate against.
+// validateExtensions checks each requested extension name against the TalosExtensions catalog. An
+// empty list is accepted. An empty Talos version is the "automatic" sentinel used by resources
+// like InstallationMediaConfig; in that case the default Talos version's catalog is used so the
+// names still get validated.
 func validateExtensions(ctx context.Context, st state.State, talosVersion string, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
 
 	if talosVersion == "" {
-		return errors.New("extensions require a Talos version to validate against")
+		talosVersion = constants.DefaultTalosVersion
 	}
 
 	catalog, err := safe.StateGet[*omni.TalosExtensions](ctx, st, omni.NewTalosExtensions(talosVersion).Metadata())

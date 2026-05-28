@@ -119,22 +119,24 @@ func createPreset(ctx context.Context, cmd *cobra.Command, client *client.Client
 	}
 
 	// Normalize the user-supplied Talos version to the canonical no-"v" form expected by the
-	// server-side state validator.
-	talosVersion := strings.TrimLeft(createCmdFlags.talosVersion, "v")
+	// server-side state validator. An empty value is the "automatic" sentinel and is preserved.
+	talosVersion := strings.TrimPrefix(createCmdFlags.talosVersion, "v")
 
-	// An empty user value means "use the server's default at download time"; for create-time
-	// validation against platform min-versions and extension catalogs, fall back to the CLI's
-	// default Talos version so the checks still run.
-	validationTalosVersion := talosVersion
-	if validationTalosVersion == "" {
-		validationTalosVersion = constants.DefaultTalosVersion
-	}
-
-	if err = download.ValidateTalosVersion(ctx, client.Omni().State(), validationTalosVersion); err != nil {
+	bootloader, err := download.ParseBootloader(createCmdFlags.bootloader)
+	if err != nil {
 		return err
 	}
 
-	bootloader, err := download.ParseBootloader(createCmdFlags.bootloader)
+	// Resolve any short / partial extension names to the full catalog names. The catalog used is
+	// either the user-supplied Talos version, or the default if the user left it empty: we still
+	// need a concrete catalog to resolve against. The server is responsible for actually
+	// validating the resulting spec.
+	resolveTalosVersion := talosVersion
+	if resolveTalosVersion == "" {
+		resolveTalosVersion = constants.DefaultTalosVersion
+	}
+
+	resolvedExtensions, err := download.ResolveExtensions(ctx, client.Omni().State(), resolveTalosVersion, createCmdFlags.extensions)
 	if err != nil {
 		return err
 	}
@@ -142,7 +144,7 @@ func createPreset(ctx context.Context, cmd *cobra.Command, client *client.Client
 	spec := &specs.InstallationMediaConfigSpec{
 		TalosVersion:      talosVersion,
 		Architecture:      arch,
-		InstallExtensions: createCmdFlags.extensions,
+		InstallExtensions: resolvedExtensions,
 		KernelArgs:        strings.Join(createCmdFlags.extraKernelArgs, " "),
 		JoinToken:         tokenID,
 		SecureBoot:        createCmdFlags.secureBoot,
@@ -159,7 +161,7 @@ func createPreset(ctx context.Context, cmd *cobra.Command, client *client.Client
 	}
 
 	if createCmdFlags.platform != "" {
-		if err = download.ValidateCloudPlatform(ctx, client.Omni().State(), createCmdFlags.platform, arch, createCmdFlags.secureBoot, validationTalosVersion); err != nil {
+		if err = download.ValidateCloudPlatform(ctx, client.Omni().State(), createCmdFlags.platform, arch, createCmdFlags.secureBoot, resolveTalosVersion); err != nil {
 			return err
 		}
 
@@ -169,7 +171,7 @@ func createPreset(ctx context.Context, cmd *cobra.Command, client *client.Client
 	}
 
 	if createCmdFlags.overlay != "" {
-		if err = download.ValidateSBC(ctx, client.Omni().State(), createCmdFlags.overlay, validationTalosVersion); err != nil {
+		if err = download.ValidateSBC(ctx, client.Omni().State(), createCmdFlags.overlay, resolveTalosVersion); err != nil {
 			return err
 		}
 
@@ -177,10 +179,6 @@ func createPreset(ctx context.Context, cmd *cobra.Command, client *client.Client
 			Overlay:        createCmdFlags.overlay,
 			OverlayOptions: createCmdFlags.overlayOptions,
 		}
-	}
-
-	if err = download.ValidateExtensions(ctx, client.Omni().State(), validationTalosVersion, createCmdFlags.extensions); err != nil {
-		return err
 	}
 
 	if createCmdFlags.labels != nil {

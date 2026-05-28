@@ -32,6 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/siderolabs/omni/client/api/omni/specs"
+	"github.com/siderolabs/omni/client/pkg/constants"
 	"github.com/siderolabs/omni/client/pkg/omni/resources/auth"
 	"github.com/siderolabs/omni/client/pkg/omni/resources/infra"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
@@ -2295,7 +2296,10 @@ func TestInstallationMediaConfigTalosVersionValidation(t *testing.T) {
 func TestExtensionsCatalogValidation(t *testing.T) {
 	t.Parallel()
 
-	const talosVersionID = "1.7.5"
+	// Use the same default Talos version as the validator so empty-version cases (where the
+	// validator falls back to constants.DefaultTalosVersion) still find a catalog in the test
+	// state.
+	talosVersionID := constants.DefaultTalosVersion
 
 	setupBaseState := func(t *testing.T) state.State {
 		innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
@@ -2320,36 +2324,34 @@ func TestExtensionsCatalogValidation(t *testing.T) {
 	t.Run("installation media config", func(t *testing.T) {
 		t.Parallel()
 
+		// An empty Talos version is the "automatic" sentinel. The validator falls back to the
+		// default Talos version's catalog so extension names are still checked. With a concrete
+		// version, the catalog for that version is used as for any other resource.
 		for _, tt := range []struct {
-			extraSetup   func(ctx context.Context, t *testing.T, innerSt state.State)
 			name         string
 			talosVersion string
 			errContains  string
 			extensions   []string
 		}{
-			{name: "empty extensions, no version", talosVersion: ""},
-			{name: "valid extension", talosVersion: talosVersionID, extensions: []string{"siderolabs/qemu-guest-agent"}},
+			{name: "empty extensions, no version"},
+			{name: "valid extension without version (automatic)", extensions: []string{"siderolabs/qemu-guest-agent"}},
 			{
-				name:         "unknown extension",
+				name:        "unknown extension without version (automatic)",
+				extensions:  []string{"siderolabs/typo-extension"},
+				errContains: "is not available",
+			},
+			{name: "valid extension with version", talosVersion: talosVersionID, extensions: []string{"siderolabs/qemu-guest-agent"}},
+			{
+				name:         "unknown extension with version",
 				talosVersion: talosVersionID,
 				extensions:   []string{"siderolabs/typo-extension"},
 				errContains:  "is not available",
 			},
 			{
-				name:        "extensions without version",
-				extensions:  []string{"siderolabs/qemu-guest-agent"},
-				errContains: "require a Talos version",
-			},
-			{
-				name: "version without catalog",
-				extraSetup: func(ctx context.Context, t *testing.T, innerSt state.State) {
-					tv := omnires.NewTalosVersion("9.9.9")
-					tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.30.0"}
-					require.NoError(t, innerSt.Create(ctx, tv))
-				},
-				talosVersion: "9.9.9",
-				extensions:   []string{"siderolabs/qemu-guest-agent"},
-				errContains:  "no Talos extensions catalog",
+				name:         "short extension name rejected with version",
+				talosVersion: talosVersionID,
+				extensions:   []string{"qemu-guest-agent"},
+				errContains:  "is not available",
 			},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
@@ -2359,10 +2361,6 @@ func TestExtensionsCatalogValidation(t *testing.T) {
 				t.Cleanup(cancel)
 
 				innerSt := setupBaseState(t)
-				if tt.extraSetup != nil {
-					tt.extraSetup(ctx, t, innerSt)
-				}
-
 				st := validated.NewState(innerSt, validations.InstallationMediaConfigValidationOptions(innerSt)...)
 
 				media := omnires.NewInstallationMediaConfig("test")
