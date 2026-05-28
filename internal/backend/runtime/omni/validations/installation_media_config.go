@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/cosi-project/runtime/pkg/resource"
+	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/cosi-project/runtime/pkg/state"
 
 	"github.com/siderolabs/omni/client/api/omni/specs"
@@ -20,6 +21,7 @@ import (
 	"github.com/siderolabs/omni/internal/backend/runtime/omni/virtual/pkg/factory/configs"
 )
 
+//nolint:gocognit
 func installationMediaConfigValidationOptions(st state.State) []validated.StateOption {
 	validateInstallationMedia := func(ctx context.Context, res *omni.InstallationMediaConfig) error {
 		if res.Metadata().Phase() == resource.PhaseTearingDown {
@@ -58,6 +60,16 @@ func installationMediaConfigValidationOptions(st state.State) []validated.StateO
 
 		if err := validateUserString("kernel args", spec.GetKernelArgs(), MaxExtraKernelArgsLength); err != nil {
 			return err
+		}
+
+		if version := spec.GetTalosVersion(); version != "" {
+			if _, err := safe.StateGet[*omni.TalosVersion](ctx, st, omni.NewTalosVersion(version).Metadata()); err != nil {
+				if state.IsNotFoundError(err) {
+					return fmt.Errorf("unknown Talos version %q", version)
+				}
+
+				return fmt.Errorf("failed to look up Talos version %q: %w", version, err)
+			}
 		}
 
 		return validateExtensions(ctx, st, spec.GetTalosVersion(), spec.GetInstallExtensions())

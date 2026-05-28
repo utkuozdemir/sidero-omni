@@ -2021,6 +2021,69 @@ func TestKernelArgsValidation(t *testing.T) {
 	})
 }
 
+func TestInstallationMediaConfigTalosVersionValidation(t *testing.T) {
+	t.Parallel()
+
+	const talosVersionID = "1.13.2"
+
+	setup := func(t *testing.T) state.State {
+		innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+
+		talosVersion := omnires.NewTalosVersion(talosVersionID)
+		talosVersion.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.30.0"}
+		require.NoError(t, innerSt.Create(ctx, talosVersion))
+
+		return innerSt
+	}
+
+	for _, tt := range []struct {
+		name         string
+		talosVersion string
+		errContains  string
+	}{
+		{name: "empty"},
+		{name: "canonical", talosVersion: talosVersionID},
+		{
+			name:         "v-prefixed",
+			talosVersion: "v" + talosVersionID,
+			errContains:  `unknown Talos version "v1.13.2"`,
+		},
+		{
+			name:         "unknown",
+			talosVersion: "9.9.9",
+			errContains:  `unknown Talos version "9.9.9"`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := setup(t)
+			st := validated.NewState(innerSt, validations.InstallationMediaConfigValidationOptions(innerSt)...)
+
+			media := omnires.NewInstallationMediaConfig("test")
+			media.TypedSpec().Value.Architecture = specs.PlatformConfigSpec_AMD64
+			media.TypedSpec().Value.TalosVersion = tt.talosVersion
+
+			err := st.Create(ctx, media)
+			if tt.errContains == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+			assert.ErrorContains(t, err, tt.errContains)
+		})
+	}
+}
+
+//nolint:maintidx
 func TestExtensionsCatalogValidation(t *testing.T) {
 	t.Parallel()
 
@@ -2050,6 +2113,7 @@ func TestExtensionsCatalogValidation(t *testing.T) {
 		t.Parallel()
 
 		for _, tt := range []struct {
+			extraSetup   func(ctx context.Context, t *testing.T, innerSt state.State)
 			name         string
 			talosVersion string
 			errContains  string
@@ -2069,7 +2133,12 @@ func TestExtensionsCatalogValidation(t *testing.T) {
 				errContains: "require a Talos version",
 			},
 			{
-				name:         "version without catalog",
+				name: "version without catalog",
+				extraSetup: func(ctx context.Context, t *testing.T, innerSt state.State) {
+					tv := omnires.NewTalosVersion("9.9.9")
+					tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.30.0"}
+					require.NoError(t, innerSt.Create(ctx, tv))
+				},
 				talosVersion: "9.9.9",
 				extensions:   []string{"siderolabs/qemu-guest-agent"},
 				errContains:  "no Talos extensions catalog",
@@ -2082,6 +2151,10 @@ func TestExtensionsCatalogValidation(t *testing.T) {
 				t.Cleanup(cancel)
 
 				innerSt := setupBaseState(t)
+				if tt.extraSetup != nil {
+					tt.extraSetup(ctx, t, innerSt)
+				}
+
 				st := validated.NewState(innerSt, validations.InstallationMediaConfigValidationOptions(innerSt)...)
 
 				media := omnires.NewInstallationMediaConfig("test")
