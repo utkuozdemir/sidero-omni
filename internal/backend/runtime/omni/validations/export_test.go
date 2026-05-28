@@ -113,6 +113,10 @@ func KernelArgsValidationOptions() []validated.StateOption {
 	return kernelArgsValidationOptions()
 }
 
+func MetadataValidationOptions() []validated.StateOption {
+	return metadataValidationOptions()
+}
+
 func ExtensionsConfigurationValidationOptions(st state.State) []validated.StateOption {
 	return extensionsConfigurationValidationOptions(st)
 }

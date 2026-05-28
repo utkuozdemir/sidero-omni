@@ -2021,6 +2021,51 @@ func TestKernelArgsValidation(t *testing.T) {
 	})
 }
 
+func TestMetadataIDValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name        string
+		id          string
+		errContains string
+	}{
+		{name: "valid", id: "regular-id"},
+		{name: "empty", id: "", errContains: "must not be empty"},
+		{name: "newline", id: "foo\nbar", errContains: "control character"},
+		{name: "tab", id: "foo\tbar", errContains: "control character"},
+		{name: "NUL", id: "foo\x00bar", errContains: "control character"},
+		{name: "ANSI escape", id: "\x1b[31mred\x1b[0m", errContains: "control character"},
+		{name: "DEL", id: "foo\x7fbar", errContains: "control character"},
+		{
+			name:        "too long",
+			id:          strings.Repeat("x", validations.MaxResourceIDLength+1),
+			errContains: "too long",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			t.Cleanup(cancel)
+
+			innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+			st := validated.NewState(innerSt, validations.MetadataValidationOptions()...)
+
+			res := omnires.NewKernelArgs(tt.id)
+
+			err := st.Create(ctx, res)
+			if tt.errContains == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+			assert.ErrorContains(t, err, tt.errContains)
+		})
+	}
+}
+
 func TestInstallationMediaConfigTalosVersionValidation(t *testing.T) {
 	t.Parallel()
 
