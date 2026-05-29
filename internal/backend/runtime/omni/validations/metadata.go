@@ -41,11 +41,13 @@ const (
 )
 
 // metadataValidationOptions enforces universal metadata rules: resource ID rules at create time
-// (non-empty, no control characters, length cap), and label and annotation rules at both create and
-// update (key non-empty, key/value within length cap, no control characters, count cap). Updates
-// validate only entries that are new or changed compared to the existing resource, so existing
-// offending values do not block unrelated updates. The count cap on updates fires only when the
-// total grows past the cap from a previously smaller-or-equal value.
+// (non-empty, no control characters, length cap), label and annotation rules at both create and
+// update (key non-empty, key/value within length cap, no control characters, count cap), and a ban
+// on user-driven changes to the finalizers list. Finalizers belong to controllers and are managed
+// via the dedicated AddFinalizer / RemoveFinalizer state API which bypasses this validator. Create
+// requires the finalizers list to be empty; Update requires it to match the stored list exactly.
+// Label and annotation updates validate only entries that are new or changed compared to the
+// existing resource, so existing offending values do not block unrelated updates.
 func metadataValidationOptions() []validated.StateOption {
 	return []validated.StateOption{
 		validated.WithCreateValidations(
@@ -58,6 +60,9 @@ func metadataValidationOptions() []validated.StateOption {
 			func(_ context.Context, res resource.Resource, _ ...state.CreateOption) error {
 				return validateMetadataMap("annotation", nil, res.Metadata().Annotations().Raw(), MaxAnnotationsCount, MaxAnnotationKeyLength, MaxAnnotationValueLength)
 			},
+			func(_ context.Context, res resource.Resource, _ ...state.CreateOption) error {
+				return validateFinalizers(nil, res.Metadata().Finalizers())
+			},
 		),
 		validated.WithUpdateValidations(
 			func(_ context.Context, oldRes, newRes resource.Resource, _ ...state.UpdateOption) error {
@@ -66,8 +71,48 @@ func metadataValidationOptions() []validated.StateOption {
 			func(_ context.Context, oldRes, newRes resource.Resource, _ ...state.UpdateOption) error {
 				return validateMetadataMap("annotation", existingAnnotations(oldRes), newRes.Metadata().Annotations().Raw(), MaxAnnotationsCount, MaxAnnotationKeyLength, MaxAnnotationValueLength)
 			},
+			func(_ context.Context, oldRes, newRes resource.Resource, _ ...state.UpdateOption) error {
+				return validateFinalizers(oldRes.Metadata().Finalizers(), newRes.Metadata().Finalizers())
+			},
 		),
 	}
+}
+
+// validateFinalizers blocks user-driven changes to the finalizers list. On create, old is nil and
+// the new list must be empty. On update, the submitted list must be set-equal to the stored list:
+// clients cannot add new finalizers (which would create unrecoverable tearingDown resources) and
+// cannot drop existing ones (which would let resources skip controller cleanup). Controllers manage
+// their own finalizers via the AddFinalizer / RemoveFinalizer state API, which does not go through
+// this validator.
+func validateFinalizers(old, current *resource.Finalizers) error {
+	if old == nil {
+		if current != nil && !current.Empty() {
+			return errors.New("finalizers must not be set by clients on resource creation")
+		}
+
+		return nil
+	}
+
+	oldList := *old
+
+	var currentList resource.Finalizers
+	if current != nil {
+		currentList = *current
+	}
+
+	for _, fin := range currentList {
+		if !old.Has(fin) {
+			return fmt.Errorf("finalizer %q must not be added by clients", fin)
+		}
+	}
+
+	for _, fin := range oldList {
+		if !currentList.Has(fin) {
+			return fmt.Errorf("finalizer %q must not be removed by clients", fin)
+		}
+	}
+
+	return nil
 }
 
 func validateResourceID(id string) error {

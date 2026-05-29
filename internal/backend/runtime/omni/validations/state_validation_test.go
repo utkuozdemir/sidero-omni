@@ -2231,6 +2231,109 @@ func TestMetadataLabelsAnnotationsValidation(t *testing.T) {
 	})
 }
 
+func TestMetadataFinalizersValidation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("create with no finalizers passes", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+
+		innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+		st := validated.NewState(innerSt, validations.MetadataValidationOptions()...)
+
+		res := omnires.NewKernelArgs("finalizer-test-clean")
+
+		require.NoError(t, st.Create(ctx, res))
+	})
+
+	t.Run("create with finalizer is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+
+		innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+		st := validated.NewState(innerSt, validations.MetadataValidationOptions()...)
+
+		res := omnires.NewKernelArgs("finalizer-test-create")
+		res.Metadata().Finalizers().Add("dummy-user-finalizer")
+
+		err := st.Create(ctx, res)
+		assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+		assert.ErrorContains(t, err, "finalizers must not be set")
+	})
+
+	t.Run("update preserving existing finalizers passes", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+
+		innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+
+		res := omnires.NewKernelArgs("finalizer-test-update-1")
+		res.Metadata().Finalizers().Add("existing-controller-finalizer")
+		require.NoError(t, innerSt.Create(ctx, res))
+
+		st := validated.NewState(innerSt, validations.MetadataValidationOptions()...)
+
+		updated, err := safe.StateGetByID[*omnires.KernelArgs](ctx, state.WrapCore(st), "finalizer-test-update-1")
+		require.NoError(t, err)
+
+		updated.TypedSpec().Value.Args = []string{"console=ttyS0"}
+		require.NoError(t, st.Update(ctx, updated))
+	})
+
+	t.Run("update removing a finalizer is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+
+		innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+
+		res := omnires.NewKernelArgs("finalizer-test-update-2")
+		res.Metadata().Finalizers().Add("existing-controller-finalizer")
+		require.NoError(t, innerSt.Create(ctx, res))
+
+		st := validated.NewState(innerSt, validations.MetadataValidationOptions()...)
+
+		updated, err := safe.StateGetByID[*omnires.KernelArgs](ctx, state.WrapCore(st), "finalizer-test-update-2")
+		require.NoError(t, err)
+		updated.Metadata().Finalizers().Remove("existing-controller-finalizer")
+
+		err = st.Update(ctx, updated)
+		assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+		assert.ErrorContains(t, err, `finalizer "existing-controller-finalizer"`)
+		assert.ErrorContains(t, err, "must not be removed")
+	})
+
+	t.Run("update adding a new finalizer is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+
+		innerSt := state.WrapCore(namespaced.NewState(inmem.Build))
+
+		res := omnires.NewKernelArgs("finalizer-test-update-3")
+		res.Metadata().Finalizers().Add("existing-controller-finalizer")
+		require.NoError(t, innerSt.Create(ctx, res))
+
+		st := validated.NewState(innerSt, validations.MetadataValidationOptions()...)
+
+		updated, err := safe.StateGetByID[*omnires.KernelArgs](ctx, state.WrapCore(st), "finalizer-test-update-3")
+		require.NoError(t, err)
+		updated.Metadata().Finalizers().Add("freshly-added-by-client")
+
+		err = st.Update(ctx, updated)
+		assert.True(t, validated.IsValidationError(err), "expected validation error, got %v", err)
+		assert.ErrorContains(t, err, `finalizer "freshly-added-by-client"`)
+	})
+}
+
 func TestInstallationMediaConfigTalosVersionValidation(t *testing.T) {
 	t.Parallel()
 
