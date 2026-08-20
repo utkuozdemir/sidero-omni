@@ -833,12 +833,15 @@ func AssertTalosUpgradeFlow(testCtx context.Context, st state.State, managementC
 			assertRunnersCleanedUp()
 		}
 
-		// TODO: Remove below code block when this test starts testing upgrades from Talos 1.11 to 1.12.
-		// Pin etcd version with ConfigPatch for Talos 1.11
-		// This is needed for tests that downgrade Talos 1.11 to 1.10.
-		// Talos 1.11 comes with etcd 3.6 which introduced a new DB format that's not compatible with etcd 3.5 used by Talos 1.10.
-		if strings.HasPrefix(newTalosVersion, "1.11") {
-			t.Logf("Pinning etcd version to %s for Talos v1.11", talosconstants.DefaultEtcdVersion)
+		// TODO: Remove this block once the test upgrades from Talos 1.14 to 1.15, provided 1.15 ships
+		// the same etcd minor as 1.14.
+		// Talos 1.14 runs etcd 3.7, which bumps the on-disk storage version, and the etcd 3.6 that
+		// ships with Talos 1.13 then refuses to start on that data directory
+		// ("version 3.7.0 is not supported").
+		// Pinning the image on the control planes keeps the downgraded machines on the newer etcd,
+		// which can still read their data directory.
+		if strings.HasPrefix(newTalosVersion, "1.14") {
+			t.Logf("Pinning etcd version to %s for Talos v1.14", talosconstants.DefaultEtcdVersion)
 
 			configPatchEtcd := omni.NewConfigPatch(
 				fmt.Sprintf("001-%s-pin-etcd", clusterName),
